@@ -2,13 +2,12 @@ package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
-import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 import java.util.concurrent.*;
 
-public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
-  private final SrmlMap<K, V> map;
+public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
+  private final Srml2Map<K, V> map;
 
   private final Set<K> reads = new HashSet<>();
 
@@ -18,7 +17,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private final long readVersion;
 
-  private final Set<SrmlContext<K, V>> peerContexts = new CopyOnWriteArraySet<>();
+  private final Set<Srml2Context<K, V>> peerContexts = new CopyOnWriteArraySet<>();
 
   private final Map<K, Versioned<V>> backupValues = new ConcurrentHashMap<>();
 
@@ -26,18 +25,24 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private State state = State.OPEN;
 
-  SrmlContext(SrmlMap<K, V> map) {
+  Srml2Context(Srml2Map<K, V> map) {
     this.map = map;
 
+    map.getOpenContexts().add(this);
+    final boolean hadQueued;
     synchronized (map.getContextLock()) {
       final var oldestQueuedContext = map.getQueuedContexts().peekFirst();
       if (oldestQueuedContext != null) {
+        hadQueued = true;
         readVersion = oldestQueuedContext.writeVersion - 1;
-        peerContexts.addAll(map.getQueuedContexts());
       } else {
+        hadQueued = false;
         readVersion = map.getVersion();
       }
-      map.getOpenContexts().add(this);
+    }
+
+    if (hadQueued) {
+      peerContexts.addAll(map.getQueuedContexts());
     }
   }
 
@@ -54,7 +59,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   @Override
-  public V read(K key) {
+  public V read(K key) throws BrokenSnapshotFailure {
     ensureOpen();
     final var existing = localValues.get(key);
     if (existing != null) {
@@ -78,7 +83,9 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       return clonedValue.getValue();
     } else {
       final var backupValue = findAmongPeers(key);
-      Assert.that(backupValue != null, () -> String.format("Unable to restore value for key %s at version %d (current at %d)", key, readVersion, storedValue.getVersion()));
+      if (backupValue == null) {
+        throw new BrokenSnapshotFailure("Unable to restore value for key " + key + " at version " + readVersion + ", current at " + storedValue.getVersion());
+      }
       final var clonedValue = backupValue.deepClone();
       localValues.put(key, clonedValue);
       return clonedValue.getValue();
@@ -121,7 +128,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   @Override
-  public void close() throws AntidependencyFailure, MutexAcquisitionFailure {
+  public void close() throws MutexAcquisitionFailure, AntidependencyFailure {
     if (state != State.OPEN) {
       return;
     }
@@ -184,16 +191,16 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     synchronized (map.getContextLock()) {
       writeVersion = map.incrementAndGetVersion();
       map.getQueuedContexts().addLast(this);
-      for (var openContext : map.getOpenContexts()) {
-        openContext.peerContexts.add(this);
-      }
+    }
+
+    for (var openContext : map.getOpenContexts()) {
+      openContext.peerContexts.add(this);
     }
 
     for (var write : writes) {
       final var replacementValue = new Versioned<>(writeVersion, localValues.get(write).getValue());
       map.getStore().compute(write, (__, previousValue) -> {
         if (previousValue != null) {
-          //          System.out.format("  %s, backing up %s (writeVersion %d)\n", Thread.currentThread().getName(), previousValue, writeVersion);
           backupValues.put(write, previousValue);
         }
         return replacementValue;
@@ -201,9 +208,9 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     }
 
     releaseMutexes(combinedMutexes);
+    map.getOpenContexts().remove(this);
     synchronized (map.getContextLock()) {
       state = State.COMMITTED;
-      map.getOpenContexts().remove(this);
       drainQueuedContexts();
     }
     //    System.out.format("  %s, committed readVersion %d, writeVersion %d\n", Thread.currentThread().getName(), readVersion, writeVersion);
@@ -236,9 +243,9 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private void rollbackFromCommitAttempt(SortedMap<MutexRef<Mutex>, LockModeAndState> combinedMutexes) {
     releaseMutexes(combinedMutexes);
+    map.getOpenContexts().remove(this);
     synchronized (map.getContextLock()) {
       state = State.ROLLED_BACK;
-      map.getOpenContexts().remove(this);
       drainQueuedContexts();
     }
   }

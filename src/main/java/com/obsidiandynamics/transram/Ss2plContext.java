@@ -28,7 +28,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   }
 
   @Override
-  public V read(K key) throws ConcurrentModeFailure {
+  public V read(K key) throws MutexAcquisitionFailure {
     ensureOpen();
     final var existing = localValues.get(key);
     if (existing != null) {
@@ -44,11 +44,11 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
           if (!mutex.mutex().tryReadAcquire(mutexTimeoutMs)) {
             readMutexes.remove(mutex);
             rollback();
-            throw new ConcurrentModeFailure("Timed out while acquiring read mutex for key " + key, null);
+            throw new MutexAcquisitionFailure("Timed out while acquiring read mutex for key " + key, null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new ConcurrentModeFailure("Interrupted while acquiring read mutex for key " + key, e);
+          throw new MutexAcquisitionFailure("Interrupted while acquiring read mutex for key " + key, e);
         }
       }
     }
@@ -65,7 +65,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   }
 
   @Override
-  public void write(K key, V value) throws ConcurrentModeFailure {
+  public void write(K key, V value) throws MutexAcquisitionFailure {
     ensureOpen();
     final var mutex = map.getMutexes().forKey(key);
     final var addedMutex = writeMutexes.add(mutex);
@@ -77,22 +77,22 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
             readMutexes.add(mutex);
             writeMutexes.remove(mutex);
             rollback();
-            throw new ConcurrentModeFailure("Timed out while upgrading mutex for key " + key, null);
+            throw new MutexAcquisitionFailure("Timed out while upgrading mutex for key " + key, null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new ConcurrentModeFailure("Interrupted while upgrading mutex for key " + key, e);
+          throw new MutexAcquisitionFailure("Interrupted while upgrading mutex for key " + key, e);
         }
       } else {
         try {
           if (!mutex.mutex().tryWriteAcquire(mutexTimeoutMs)) {
             writeMutexes.remove(mutex);
             rollback();
-            throw new ConcurrentModeFailure("Timed out while acquiring write mutex for key " + key, null);
+            throw new MutexAcquisitionFailure("Timed out while acquiring write mutex for key " + key, null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new ConcurrentModeFailure("Interrupted while acquiring write mutex for key " + key, e);
+          throw new MutexAcquisitionFailure("Interrupted while acquiring write mutex for key " + key, e);
         }
       }
     }

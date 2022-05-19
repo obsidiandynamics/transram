@@ -13,6 +13,7 @@ import static com.obsidiandynamics.transram.util.Table.*;
 
 public final class Harness {
   private static class RunOptions implements Cloneable {
+    int thinkTimeMs = -1;
     int numAccounts;
     int initialBalance;
     int maxXferAmount;
@@ -21,7 +22,8 @@ public final class Harness {
     int numOpsPerThread;
     boolean log = false;
 
-    private void validate() {
+    void validate() {
+      Assert.that(thinkTimeMs >= 0);
       Assert.that(numAccounts > 0);
       Assert.that(initialBalance > 0);
       Assert.that(maxXferAmount > 0);
@@ -41,13 +43,18 @@ public final class Harness {
   }
 
   private static final RunOptions RUN_OPTIONS = new RunOptions() {{
+    thinkTimeMs = 0;
     numAccounts = 10_000;
     initialBalance = 100;
     maxXferAmount = 100;
     scanAccounts = 10;
     numThreads = 16;
-    numOpsPerThread = 10_000;
+    numOpsPerThread = 1_000;
   }};
+
+  private static final long MIN_DURATION_MS = 5_000;
+
+  private static final double WARMUP_FRACTION = 0.1;
 
   private static final double[][] PROFILES = {
       {0.1, 0.0, 0.9},
@@ -57,10 +64,24 @@ public final class Harness {
 
   private static class State {
     final TransMap<Integer, Account> map;
-    final AtomicLong cmFailures = new AtomicLong();
+    final AtomicLong mutexFailures = new AtomicLong();
+    final AtomicLong snapshotFailures = new AtomicLong();
+    final AtomicLong antidependencyFailures = new AtomicLong();
 
-    private State(TransMap<Integer, Account> map) {
+    State(TransMap<Integer, Account> map) {
       this.map = map;
+    }
+
+    void classifyFailure(ConcurrentModeFailure e) {
+      if (e instanceof MutexAcquisitionFailure) {
+        mutexFailures.incrementAndGet();
+      } else if (e instanceof BrokenSnapshotFailure) {
+        snapshotFailures.incrementAndGet();
+      } else if (e instanceof AntidependencyFailure) {
+        antidependencyFailures.incrementAndGet();
+      } else {
+        throw new UnsupportedOperationException("Unsupported concurrent mode failure " + e.getClass());
+      }
     }
   }
 
@@ -70,13 +91,14 @@ public final class Harness {
       void operate(State state, SplittableRandom rnd, RunOptions options) {
         final var firstAccountId = (int) (rnd.nextDouble() * options.numAccounts);
         Enclose.over(state.map)
-            .onFailure(__ -> state.cmFailures.incrementAndGet())
+            .onFailure(state::classifyFailure)
             .transact(ctx -> {
               for (var i = 0; i < options.scanAccounts; i++) {
                 final var accountId = i + firstAccountId;
                 final var account = ctx.read(accountId % options.numAccounts);
                 Assert.that(account != null, () -> String.format("Account %d was null", accountId));
               }
+              think(options.thinkTimeMs);
               return Action.ROLLBACK;
             });
       }
@@ -87,13 +109,14 @@ public final class Harness {
       void operate(State state, SplittableRandom rnd, RunOptions options) {
         final var firstAccountId = (int) (rnd.nextDouble() * options.numAccounts);
         Enclose.over(state.map)
-            .onFailure(__ -> state.cmFailures.incrementAndGet())
+            .onFailure(state::classifyFailure)
             .transact(ctx -> {
               for (var i = 0; i < options.scanAccounts; i++) {
                 final var accountId = i + firstAccountId;
                 final var account = ctx.read(accountId % options.numAccounts);
                 Assert.that(account != null, () -> String.format("Account %d was null", accountId));
               }
+              think(options.thinkTimeMs);
               return Action.COMMIT;
             });
       }
@@ -103,7 +126,7 @@ public final class Harness {
       @Override
       void operate(State state, SplittableRandom rnd, RunOptions options) {
         Enclose.over(state.map)
-            .onFailure(__ -> state.cmFailures.incrementAndGet())
+            .onFailure(state::classifyFailure)
             .transact(ctx -> {
               final var fromAccountId = (int) (rnd.nextDouble() * options.numAccounts);
               final var toAccountId = (int) (rnd.nextDouble() * options.numAccounts);
@@ -127,26 +150,36 @@ public final class Harness {
 
               ctx.write(fromAccountId, fromAccount);
               ctx.write(toAccountId, toAccount);
+              think(options.thinkTimeMs);
               return Action.COMMIT;
             });
       }
     };
 
     abstract void operate(State state, SplittableRandom rnd, RunOptions options);
+
+    private static void think(long time) {
+      if (time > 0) {
+        try {
+          Thread.sleep(time);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
   }
 
   public static void run(Supplier<TransMap<Integer, Account>> mapFactory) throws InterruptedException {
-    final var warmupMap = mapFactory.get();
-    System.out.format("Running benchmarks for %s...\n", warmupMap.getClass().getSimpleName());
+    System.out.format("Running benchmarks for %s...\n",  mapFactory.get().getClass().getSimpleName());
     System.out.format("- Warmup...\n");
     final var warmupOptions = RUN_OPTIONS.clone();
-    warmupOptions.numOpsPerThread /= 50;
+    warmupOptions.numOpsPerThread *= WARMUP_FRACTION;
     final var warmupProfile = new double[]{0.33, 0.33, 0.34};
-    runOne(warmupMap, warmupOptions, warmupProfile);
+    runOne(mapFactory, warmupOptions, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION));
 
     for (var i = 0; i < PROFILES.length; i++) {
-      System.out.format("- Run %d of %d\n", i + 1, PROFILES.length);
-      final var result = runOne(mapFactory.get(), RUN_OPTIONS, PROFILES[i]);
+      System.out.format("- Workload %d of %d...\n", i + 1, PROFILES.length);
+      final var result = runOne(mapFactory, RUN_OPTIONS, PROFILES[i], MIN_DURATION_MS);
       dumpResult(result, RUN_OPTIONS, PROFILES[i]);
     }
   }
@@ -156,51 +189,63 @@ public final class Harness {
     final Workload workload;
     final State state;
 
-    private RunResult(long elapsedMs, Workload workload, State state) {
+    RunResult(long elapsedMs, Workload workload, State state) {
       this.elapsedMs = elapsedMs;
       this.workload = workload;
       this.state = state;
     }
   }
 
-  private static RunResult runOne(TransMap<Integer, Account> map, RunOptions options, double[] profile) throws InterruptedException {
-    final var state = new State(map);
-    // initialise bank accounts
-    for (var i = 0; i < options.numAccounts; i++) {
-      final var accountId = i;
-      Enclose.over(state.map).transact(ctx -> {
-        final var existingAccount = ctx.read(accountId);
-        Assert.that(existingAccount == null, () -> String.format("Found existing account %d (%s)", accountId, existingAccount));
-        ctx.write(accountId, new Account(accountId, options.initialBalance));
-        return Action.COMMIT;
-      });
-    }
+  private static RunResult runOne(Supplier<TransMap<Integer, Account>> mapFactory, RunOptions options, double[] profile, long minDurationMs) throws InterruptedException {
+    final var optionsCopy = options.clone();
+    while (true) {
+      final var map = mapFactory.get();
+      final var state = new State(map);
+      // initialise bank accounts
+      for (var i = 0; i < optionsCopy.numAccounts; i++) {
+        final var accountId = i;
+        Enclose.over(state.map).transact(ctx -> {
+          final var existingAccount = ctx.read(accountId);
+          Assert.that(existingAccount == null, () -> String.format("Found existing account %d (%s)", accountId, existingAccount));
+          ctx.write(accountId, new Account(accountId, optionsCopy.initialBalance));
+          return Action.COMMIT;
+        });
+      }
 
-    final var workload = new Workload(profile);
-    final var latch = new CountDownLatch(options.numThreads);
-    final var startTime = System.currentTimeMillis();
-    for (var i = 0; i < options.numThreads; i++) {
-      new Thread(() -> {
-        final var rnd = new SplittableRandom();
-        for (var j = 0; j < options.numOpsPerThread; j++) {
-          final var opcode = Opcode.values()[workload.eval(rnd.nextDouble())];
-          opcode.operate(state, rnd, options);
-        }
-        latch.countDown();
-      }, "xfer_thread_" + i).start();
-    }
+      final var workload = new Workload(profile);
+      final var latch = new CountDownLatch(optionsCopy.numThreads);
+      final var startTime = System.currentTimeMillis();
+      for (var i = 0; i < optionsCopy.numThreads; i++) {
+        new Thread(() -> {
+          final var rnd = new SplittableRandom();
+          for (var j = 0; j < optionsCopy.numOpsPerThread; j++) {
+            final var opcode = Opcode.values()[workload.eval(rnd.nextDouble())];
+            opcode.operate(state, rnd, optionsCopy);
+          }
+          latch.countDown();
+        }, "xfer_thread_" + i).start();
+      }
 
-    latch.await();
-    final var took = System.currentTimeMillis() - startTime;
-    if (options.log) dumpMap(state.map);
-    checkMapSum(state.map, options);
-    return new RunResult(took, workload, state);
+      latch.await();
+      final var took = System.currentTimeMillis() - startTime;
+      if (optionsCopy.log) dumpMap(state.map);
+      checkMapSum(state.map, optionsCopy);
+
+      if (took > minDurationMs) {
+        return new RunResult(took, workload, state);
+      } else {
+        optionsCopy.numOpsPerThread = (int) ((double) optionsCopy.numOpsPerThread * minDurationMs / took);
+      }
+    }
   }
 
   private static void dumpResult(RunResult result, RunOptions options, double[] profile) {
-    final var ops = options.numThreads * options.numOpsPerThread;
-    System.out.format("Took %,.1f s, %,3.0f op/s, %,d CM failures\n", result.elapsedMs / 1000f, 1000f * ops / result.elapsedMs, result.state.cmFailures.get());
+    dumpSummary(result, options);
+    System.out.println();
+    dumpDetail(result, options, profile);
+  }
 
+  private static void dumpDetail(RunResult result, RunOptions options, double[] profile) {
     final int[] padding = {15, 10, 15, 15};
     System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)");
     System.out.format(layout(padding), fill(padding, '-'));
@@ -219,6 +264,20 @@ public final class Harness {
                       String.format("%,.3f", 1.0),
                       String.format("%,d", totalOps),
                       String.format("%,.0f", 1000f * totalOps / result.elapsedMs));
+  }
+
+  private static void dumpSummary(RunResult result, RunOptions options) {
+    final int[] padding = {15, 15, 15, 15, 17, 23};
+    System.out.format(layout(padding), "Took (s)", "Ops", "Rate (op/s)", "Mutex failures", "Snapshot failures", "Antidependency failures");
+    System.out.format(layout(padding), fill(padding, ' '));
+    final var ops = options.numThreads * options.numOpsPerThread;
+    System.out.format(layout(padding),
+                      String.format("%,.3f", result.elapsedMs / 1000f),
+                      String.format("%,d", ops),
+                      String.format("%,.0f", 1000f * ops / result.elapsedMs),
+                      String.format("%,d", result.state.mutexFailures.get()),
+                      String.format("%,d", result.state.snapshotFailures.get()),
+                      String.format("%,d", result.state.antidependencyFailures.get()));
   }
 
   private static void dumpMap(TransMap<?, Account> map) {
