@@ -53,7 +53,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   @Override
-  public V read(K key) throws ConcurrentModeFailure {
+  public V read(K key) {
     ensureOpen();
     final var existing = localValues.get(key);
     if (existing != null) {
@@ -85,7 +85,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   @Override
-  public void write(K key, V value) throws ConcurrentModeFailure {
+  public void write(K key, V value) {
     ensureOpen();
     localValues.put(key, new Versioned<>(-1, value));
     writes.add(key);
@@ -180,23 +180,25 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       }
     }
 
-    synchronized (map.getContextLock()) {
-      writeVersion = map.incrementAndGetVersion();
-      map.getQueuedContexts().addLast(this);
-      for (var openContext : map.getOpenContexts()) {
-        openContext.peerContexts.add(this);
-      }
-    }
-
-    for (var write : writes) {
-      final var replacementValue = new Versioned<>(writeVersion, localValues.get(write).getValue());
-      map.getStore().compute(write, (__, previousValue) -> {
-        if (previousValue != null) {
-//          System.out.format("  %s, backing up %s (writeVersion %d)\n", Thread.currentThread().getName(), previousValue, writeVersion);
-          backupValues.put(write, previousValue);
+    if (! writes.isEmpty()) {
+      synchronized (map.getContextLock()) {
+        writeVersion = map.incrementAndGetVersion();
+        map.getQueuedContexts().addLast(this);
+        for (var openContext : map.getOpenContexts()) {
+          openContext.peerContexts.add(this);
         }
-        return replacementValue;
-      });
+      }
+
+      for (var write : writes) {
+        final var replacementValue = new Versioned<>(writeVersion, localValues.get(write).getValue());
+        map.getStore().compute(write, (__, previousValue) -> {
+          if (previousValue != null) {
+            //          System.out.format("  %s, backing up %s (writeVersion %d)\n", Thread.currentThread().getName(), previousValue, writeVersion);
+            backupValues.put(write, previousValue);
+          }
+          return replacementValue;
+        });
+      }
     }
 
     releaseLocks(combinedLocks);

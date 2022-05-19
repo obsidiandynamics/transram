@@ -6,7 +6,13 @@ import java.util.function.*;
 
 public final class Enclose<K, V extends DeepCloneable<V>> {
   public interface Region<K, V extends DeepCloneable<V>> {
-    void perform(TransContext<K, V> ctx) throws ConcurrentModeFailure;
+    enum Action {
+      ROLLBACK_AND_RESET,
+      ROLLBACK,
+      COMMIT
+    }
+
+    Action perform(TransContext<K, V> ctx) throws ConcurrentModeFailure;
   }
 
   private final TransMap<K, V> map;
@@ -32,10 +38,17 @@ public final class Enclose<K, V extends DeepCloneable<V>> {
 
   public static <K, V extends DeepCloneable<V>> void transact(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
     while (true) {
-      try (var txn = map.transact()) {
-        region.perform(txn);
-        if (txn.getState() == State.ROLLED_BACK) {
-          continue;
+      try (var ctx = map.transact()) {
+        final var outcome = region.perform(ctx);
+        switch(outcome) {
+          case ROLLBACK_AND_RESET:
+            if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
+            break;
+          case ROLLBACK:
+            if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
+            return;
+          case COMMIT:
+            break;
         }
         break;
       } catch (ConcurrentModeFailure concurrentModeFailure) {
