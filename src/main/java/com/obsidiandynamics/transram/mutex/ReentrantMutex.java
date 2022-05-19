@@ -1,10 +1,14 @@
-package com.obsidiandynamics.transram.lock;
+package com.obsidiandynamics.transram.mutex;
 
 import java.util.concurrent.*;
 import java.util.concurrent.locks.*;
 
-public class FauxUpgradeableLock implements UpgradeableLock {
-  private final ReadWriteLock lock = new ReentrantReadWriteLock(false);
+public final class ReentrantMutex implements Mutex {
+  private final ReadWriteLock lock;
+
+  public ReentrantMutex(boolean fair) {
+    lock = new ReentrantReadWriteLock(fair);
+  }
 
   @Override
   public boolean tryReadAcquire(long timeoutMs) throws InterruptedException {
@@ -24,16 +28,6 @@ public class FauxUpgradeableLock implements UpgradeableLock {
   @Override
   public void writeRelease() {
     lock.writeLock().unlock();
-  }
-
-  @Override
-  public boolean tryUpgrade(long timeoutMs) throws InterruptedException {
-    lock.readLock().unlock();
-    final var writeLocked = lock.writeLock().tryLock(timeoutMs, TimeUnit.MILLISECONDS);
-    if (! writeLocked) {
-      lock.readLock().lock();
-    }
-    return writeLocked;
   }
 
   @Override

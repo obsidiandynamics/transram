@@ -1,6 +1,6 @@
-package com.obsidiandynamics.transram.lock;
+package com.obsidiandynamics.transram.mutex;
 
-public interface UpgradeableLock {
+public interface Mutex {
   boolean tryReadAcquire(long timeoutMs) throws InterruptedException;
 
   void readRelease();
@@ -8,8 +8,6 @@ public interface UpgradeableLock {
   boolean tryWriteAcquire(long timeoutMs) throws InterruptedException;
 
   void writeRelease();
-
-  boolean tryUpgrade(long timeoutMs) throws InterruptedException;
 
   void downgrade();
 }

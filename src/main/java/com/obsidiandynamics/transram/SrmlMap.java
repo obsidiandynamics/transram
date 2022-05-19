@@ -1,22 +1,20 @@
 package com.obsidiandynamics.transram;
 
-import com.obsidiandynamics.transram.lock.*;
+import com.obsidiandynamics.transram.mutex.*;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
 
-public class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
+public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
   public static class Options {
-    public int lockStripes = 1024;
-    public Supplier<UpgradeableLock> lockFactory = UnfairUpgradeableLock::new;
+    public int mutexStripes = 1024;
+    public Supplier<UpgradeableMutex> mutexFactory = UnfairUpgradeableMutex::new;
   }
-
-  private final Options options;
 
   private final Map<K, Versioned<V>> store = new ConcurrentHashMap<>();
 
-  private final StripeLocks locks;
+  private final StripedMutexes<Mutex> mutexes;
 
   private final Object contextLock = new Object();
 
@@ -27,8 +25,7 @@ public class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
   private long version;
 
   public SrmlMap(Options options) {
-    this.options = options;
-    locks = new StripeLocks(options.lockStripes, options.lockFactory);
+    mutexes = new StripedMutexes<>(options.mutexStripes, options.mutexFactory);
   }
 
   @Override
@@ -47,8 +44,8 @@ public class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
     return Map.copyOf(store);
   }
 
-  StripeLocks getLocks() {
-    return locks;
+  StripedMutexes<Mutex> getMutexes() {
+    return mutexes;
   }
 
   Set<SrmlContext<K, V>> getOpenContexts() {

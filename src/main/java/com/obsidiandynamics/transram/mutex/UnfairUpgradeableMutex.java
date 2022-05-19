@@ -1,6 +1,6 @@
-package com.obsidiandynamics.transram.lock;
+package com.obsidiandynamics.transram.mutex;
 
-public final class UnfairUpgradeableLock implements UpgradeableLock {
+public final class UnfairUpgradeableMutex implements UpgradeableMutex {
   private static class LockState {
     boolean readLocked, writeLocked;
   }

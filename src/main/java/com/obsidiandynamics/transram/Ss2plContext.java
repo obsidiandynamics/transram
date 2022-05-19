@@ -1,17 +1,18 @@
 package com.obsidiandynamics.transram;
 
-import com.obsidiandynamics.transram.lock.StripeLocks.*;
+import com.obsidiandynamics.transram.mutex.*;
+import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 
 import java.util.*;
 
 public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
-  private final long lockTimeoutMs;
+  private final long mutexTimeoutMs;
 
   private final Ss2plMap<K, V> map;
 
-  private final Set<LockRef> readLocks = new HashSet<>();
+  private final Set<MutexRef<UpgradeableMutex>> readMutexes = new HashSet<>();
 
-  private final Set<LockRef> writeLocks = new HashSet<>();
+  private final Set<MutexRef<UpgradeableMutex>> writeMutexes = new HashSet<>();
 
   private final Map<K, Versioned<V>> localValues = new HashMap<>();
 
@@ -21,9 +22,9 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   private State state = State.OPEN;
 
-  Ss2plContext(Ss2plMap<K, V> map, long lockTimeoutMs) {
+  Ss2plContext(Ss2plMap<K, V> map, long mutexTimeoutMs) {
     this.map = map;
-    this.lockTimeoutMs = lockTimeoutMs;
+    this.mutexTimeoutMs = mutexTimeoutMs;
   }
 
   @Override
@@ -34,20 +35,20 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       return existing.getValue();
     }
 
-    final var lock = map.getLocks().forKey(key);
+    final var mutex = map.getMutexes().forKey(key);
     // don't lock for reading if we already have a write lock
-    if (! writeLocks.contains(lock)) {
-      final var addedLock = readLocks.add(lock);
-      if (addedLock) {
+    if (! writeMutexes.contains(mutex)) {
+      final var addedMutex = readMutexes.add(mutex);
+      if (addedMutex) {
         try {
-          if (!lock.lock().tryReadAcquire(lockTimeoutMs)) {
-            readLocks.remove(lock);
+          if (!mutex.mutex().tryReadAcquire(mutexTimeoutMs)) {
+            readMutexes.remove(mutex);
             rollback();
-            throw new ConcurrentModeFailure("Timed out while acquiring read lock for key " + key, null);
+            throw new ConcurrentModeFailure("Timed out while acquiring read mutex for key " + key, null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new ConcurrentModeFailure("Interrupted while acquiring read lock for key " + key, e);
+          throw new ConcurrentModeFailure("Interrupted while acquiring read mutex for key " + key, e);
         }
       }
     }
@@ -66,32 +67,32 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   @Override
   public void write(K key, V value) throws ConcurrentModeFailure {
     ensureOpen();
-    final var lock = map.getLocks().forKey(key);
-    final var addedLock = writeLocks.add(lock);
-    if (addedLock) {
-      final var readLockAcquired = readLocks.remove(lock);
-      if (readLockAcquired) {
+    final var mutex = map.getMutexes().forKey(key);
+    final var addedMutex = writeMutexes.add(mutex);
+    if (addedMutex) {
+      final var readMutexAcquired = readMutexes.remove(mutex);
+      if (readMutexAcquired) {
         try {
-          if (!lock.lock().tryUpgrade(lockTimeoutMs)) {
-            readLocks.add(lock);
-            writeLocks.remove(lock);
+          if (!mutex.mutex().tryUpgrade(mutexTimeoutMs)) {
+            readMutexes.add(mutex);
+            writeMutexes.remove(mutex);
             rollback();
-            throw new ConcurrentModeFailure("Timed out while upgrading lock for key " + key, null);
+            throw new ConcurrentModeFailure("Timed out while upgrading mutex for key " + key, null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new ConcurrentModeFailure("Interrupted while upgrading lock for key " + key, e);
+          throw new ConcurrentModeFailure("Interrupted while upgrading mutex for key " + key, e);
         }
       } else {
         try {
-          if (!lock.lock().tryWriteAcquire(lockTimeoutMs)) {
-            writeLocks.remove(lock);
+          if (!mutex.mutex().tryWriteAcquire(mutexTimeoutMs)) {
+            writeMutexes.remove(mutex);
             rollback();
-            throw new ConcurrentModeFailure("Timed out while acquiring write lock for key " + key, null);
+            throw new ConcurrentModeFailure("Timed out while acquiring write mutex for key " + key, null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new ConcurrentModeFailure("Interrupted while acquiring write lock for key " + key, e);
+          throw new ConcurrentModeFailure("Interrupted while acquiring write mutex for key " + key, e);
         }
       }
     }
@@ -103,7 +104,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   @Override
   public void rollback() {
     ensureOpen();
-    releaseLocks();
+    releaseMutexes();
     state = State.ROLLED_BACK;
   }
 
@@ -113,12 +114,12 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     }
   }
 
-  private void releaseLocks() {
-    for (var lock : readLocks) {
-      lock.lock().readRelease();
+  private void releaseMutexes() {
+    for (var mutex : readMutexes) {
+      mutex.mutex().readRelease();
     }
-    for (var lock : writeLocks) {
-      lock.lock().writeRelease();
+    for (var mutex : writeMutexes) {
+      mutex.mutex().writeRelease();
     }
   }
 
@@ -137,7 +138,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
         map.getStore().remove(key);
       }
     }
-    releaseLocks();
+    releaseMutexes();
     state = State.COMMITTED;
   }
 

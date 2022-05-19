@@ -1,6 +1,7 @@
 package com.obsidiandynamics.transram;
 
-import com.obsidiandynamics.transram.lock.StripeLocks.*;
+import com.obsidiandynamics.transram.mutex.*;
+import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
@@ -125,38 +126,38 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       return;
     }
 
-    final var combinedLocks = new TreeMap<LockRef, LockModeAndState>();
+    final var combinedMutexes = new TreeMap<MutexRef<Mutex>, LockModeAndState>();
     for (var read : reads) {
-      final var lock = map.getLocks().forKey(read);
+      final var mutex = map.getMutexes().forKey(read);
       if (writes.contains(read)) {
-        combinedLocks.put(lock, new LockModeAndState(LockMode.WRITE));
-      } else if (! combinedLocks.containsKey(lock)) {
-        combinedLocks.put(lock, new LockModeAndState(LockMode.READ));
+        combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
+      } else if (! combinedMutexes.containsKey(mutex)) {
+        combinedMutexes.put(mutex, new LockModeAndState(LockMode.READ));
       }
     }
 
     for (var write : writes) {
-      final var lock = map.getLocks().forKey(write);
-      combinedLocks.put(lock, new LockModeAndState(LockMode.WRITE));
+      final var mutex = map.getMutexes().forKey(write);
+      combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
     }
 
-    for (var lockEntry : combinedLocks.entrySet()) {
-      final var lock = lockEntry.getKey();
-      final var lockModeAndState = lockEntry.getValue();
+    for (var mutexEntry : combinedMutexes.entrySet()) {
+      final var mutex = mutexEntry.getKey();
+      final var lockModeAndState = mutexEntry.getValue();
       switch (lockModeAndState.mode) {
         case READ -> {
           try {
-            lock.lock().tryReadAcquire(Long.MAX_VALUE);
+            mutex.mutex().tryReadAcquire(Long.MAX_VALUE);
           } catch (InterruptedException e) {
-            rollbackFromCommitAttempt(combinedLocks);
+            rollbackFromCommitAttempt(combinedMutexes);
             throw new ConcurrentModeFailure("Interrupted while acquiring read lock", e);
           }
         }
         case WRITE -> {
           try {
-            lock.lock().tryWriteAcquire(Long.MAX_VALUE);
+            mutex.mutex().tryWriteAcquire(Long.MAX_VALUE);
           } catch (InterruptedException e) {
-            rollbackFromCommitAttempt(combinedLocks);
+            rollbackFromCommitAttempt(combinedMutexes);
             throw new ConcurrentModeFailure("Interrupted while acquiring write lock", e);
           }
         }
@@ -175,7 +176,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       }
 
       if (storedValueVersion > readVersion) {
-        rollbackFromCommitAttempt(combinedLocks);
+        rollbackFromCommitAttempt(combinedMutexes);
         throw new ConcurrentModeFailure("Read dependency breached for key " + read + "; expected version " + readVersion + ", saw " + storedValueVersion, null);
       }
     }
@@ -201,7 +202,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       }
     }
 
-    releaseLocks(combinedLocks);
+    releaseMutexes(combinedMutexes);
     synchronized (map.getContextLock()) {
       state = State.COMMITTED;
       map.getOpenContexts().remove(this);
@@ -222,34 +223,21 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     }
   }
 
-//  private void drainOpenContexts() {
-//    final var openContexts = map.getQueuedContexts();
-//    while (true) {
-//      final var oldest = openContexts.pollFirst();
-//      if (oldest == null) {
-//        break;
-//      } else if (oldest.state == State.OPEN) {
-//        openContexts.addFirst(oldest);
-//        break;
-//      }
-//    }
-//  }
-
-  private void releaseLocks(SortedMap<LockRef, LockModeAndState> combinedLocks) {
-    for (var lockEntry : combinedLocks.entrySet()) {
-      final var lock = lockEntry.getKey();
-      final var lockModeAndState = lockEntry.getValue();
+  private void releaseMutexes(SortedMap<MutexRef<Mutex>, LockModeAndState> combinedMutexes) {
+    for (var mutexEntry : combinedMutexes.entrySet()) {
+      final var mutex = mutexEntry.getKey();
+      final var lockModeAndState = mutexEntry.getValue();
       if (lockModeAndState.locked) {
         switch (lockModeAndState.mode) {
-          case READ -> lock.lock().readRelease();
-          case WRITE -> lock.lock().writeRelease();
+          case READ -> mutex.mutex().readRelease();
+          case WRITE -> mutex.mutex().writeRelease();
         }
       }
     }
   }
 
-  private void rollbackFromCommitAttempt(SortedMap<LockRef, LockModeAndState> combinedLocks) {
-    releaseLocks(combinedLocks);
+  private void rollbackFromCommitAttempt(SortedMap<MutexRef<Mutex>, LockModeAndState> combinedMutexes) {
+    releaseMutexes(combinedMutexes);
     synchronized (map.getContextLock()) {
       state = State.ROLLED_BACK;
       map.getOpenContexts().remove(this);

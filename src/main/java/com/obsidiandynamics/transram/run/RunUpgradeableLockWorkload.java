@@ -1,6 +1,6 @@
 package com.obsidiandynamics.transram.run;
 
-import com.obsidiandynamics.transram.lock.*;
+import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
@@ -19,7 +19,7 @@ public class RunUpgradeableLockWorkload {
   //  private static final double[] PROFILE = {0.0, 0.0, 1, 0.0};
 
   private static class State {
-    final UpgradeableLock lock = new UnfairUpgradeableLock();
+    final UpgradeableMutex lock = new UnfairUpgradeableMutex();
     long value;
     final Object upgradeGuard = new Object();
   }
