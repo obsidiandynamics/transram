@@ -1,6 +1,6 @@
 package com.obsidiandynamics.transram;
 
-public final class Versioned<V> {
+public final class Versioned<V extends DeepCloneable<V>> implements DeepCloneable<Versioned<V>> {
   private final long version;
 
   private final V value;
@@ -46,7 +46,12 @@ public final class Versioned<V> {
         ", value=" + value + ']';
   }
 
-  public static <V> Versioned<V> unset() {
+  public static <V extends DeepCloneable<V>> Versioned<V> unset() {
     return new Versioned<>(-1, null);
+  }
+
+  @Override
+  public Versioned<V> deepClone() {
+    return value == null ? this : new Versioned<>(version, value.deepClone());
   }
 }

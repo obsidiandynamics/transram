@@ -69,17 +69,17 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     final var storedValue = map.getStore().get(key);
     if (storedValue == null) {
       final var backupValue = findAmongPeers(key);
-      final var clonedValue = backupValue == null ? new Versioned<V>(readVersion, null) : new Versioned<>(backupValue.getVersion(), backupValue.getValue().deepClone());
+      final var clonedValue = backupValue == null ? new Versioned<V>(readVersion, null) : backupValue.deepClone();
       localValues.put(key, clonedValue);
       return clonedValue.getValue();
     } else if (storedValue.getVersion() <= readVersion) {
-      final var clonedValue = new Versioned<>(storedValue.getVersion(), storedValue.getValue().deepClone());
+      final var clonedValue = storedValue.deepClone();
       localValues.put(key, clonedValue);
       return clonedValue.getValue();
     } else {
       final var backupValue = findAmongPeers(key);
       Assert.that(backupValue != null, () -> String.format("Unable to restore value for key %s at version %d (current at %d)", key, readVersion, storedValue.getVersion()));
-      final var clonedValue =  new Versioned<>(backupValue.getVersion(), backupValue.getValue().deepClone());
+      final var clonedValue = backupValue.deepClone();
       localValues.put(key, clonedValue);
       return clonedValue.getValue();
     }

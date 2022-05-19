@@ -136,17 +136,17 @@ public final class Harness {
   }
 
   public static void run(Supplier<TransMap<Integer, Account>> mapFactory) throws InterruptedException {
-    final var map = mapFactory.get();
-    System.out.format("Running benchmarks for %s...\n", map.getClass().getSimpleName());
+    final var warmupMap = mapFactory.get();
+    System.out.format("Running benchmarks for %s...\n", warmupMap.getClass().getSimpleName());
     System.out.format("- Warmup...\n");
     final var warmupOptions = RUN_OPTIONS.clone();
     warmupOptions.numOpsPerThread /= 50;
     final var warmupProfile = new double[]{0.33, 0.33, 0.34};
-    runOne(map, warmupOptions, warmupProfile);
+    runOne(warmupMap, warmupOptions, warmupProfile);
 
     for (var i = 0; i < PROFILES.length; i++) {
       System.out.format("- Run %d of %d\n", i + 1, PROFILES.length);
-      final var result = runOne(map, RUN_OPTIONS, PROFILES[i]);
+      final var result = runOne(mapFactory.get(), RUN_OPTIONS, PROFILES[i]);
       dumpResult(result, RUN_OPTIONS, PROFILES[i]);
     }
   }
@@ -169,13 +169,14 @@ public final class Harness {
     for (var i = 0; i < options.numAccounts; i++) {
       final var accountId = i;
       Enclose.over(state.map).transact(ctx -> {
+        final var existingAccount = ctx.read(accountId);
+        Assert.that(existingAccount == null, () -> String.format("Found existing account %d (%s)", accountId, existingAccount));
         ctx.write(accountId, new Account(accountId, options.initialBalance));
         return Action.COMMIT;
       });
     }
 
     final var workload = new Workload(profile);
-
     final var latch = new CountDownLatch(options.numThreads);
     final var startTime = System.currentTimeMillis();
     for (var i = 0; i < options.numThreads; i++) {

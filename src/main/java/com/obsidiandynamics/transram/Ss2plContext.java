@@ -55,9 +55,9 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
     final Versioned<V> versioned = map.getStore().get(key);
     if (versioned != null) {
-      final var cloned = versioned.getValue().deepClone();
-      localValues.put(key, new Versioned<>(versioned.getVersion(), cloned));
-      return cloned;
+      final var cloned = versioned.deepClone();
+      localValues.put(key, cloned);
+      return cloned.getValue();
     } else {
       localValues.put(key, Versioned.unset());
       return null;
