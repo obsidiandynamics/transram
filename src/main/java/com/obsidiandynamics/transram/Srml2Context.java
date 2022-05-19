@@ -5,6 +5,7 @@ import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
   private final Srml2Map<K, V> map;
@@ -23,7 +24,7 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
 
   private long writeVersion = -1;
 
-  private State state = State.OPEN;
+  private final AtomicReference<State> state = new AtomicReference<>(State.OPEN);
 
   Srml2Context(Srml2Map<K, V> map) {
     this.map = map;
@@ -49,7 +50,6 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
   private Versioned<V> findAmongPeers(K key) {
     for (var peerContext : peerContexts) {
       final var backupValue = peerContext.backupValues.get(key);
-//      System.out.format("  %s, backupValue %s\n", Thread.currentThread().getName(), backupValue);
       if (backupValue != null && backupValue.getVersion() <= readVersion) {
         return backupValue;
       }
@@ -104,12 +104,12 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
     ensureOpen();
     synchronized (map.getContextLock()) {
       map.getOpenContexts().remove(this);
-      state = State.ROLLED_BACK;
     }
+    state.set(State.ROLLED_BACK);
   }
 
   private void ensureOpen() {
-    if (state != State.OPEN) {
+    if (state.get() != State.OPEN) {
       throw new IllegalStateException("Transaction is not open");
     }
   }
@@ -129,7 +129,7 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
 
   @Override
   public void close() throws MutexAcquisitionFailure, AntidependencyFailure {
-    if (state != State.OPEN) {
+    if (state.get() != State.OPEN) {
       return;
     }
 
@@ -209,19 +209,16 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
 
     releaseMutexes(combinedMutexes);
     map.getOpenContexts().remove(this);
-    synchronized (map.getContextLock()) {
-      state = State.COMMITTED;
-      drainQueuedContexts();
-    }
-    //    System.out.format("  %s, committed readVersion %d, writeVersion %d\n", Thread.currentThread().getName(), readVersion, writeVersion);
+    state.set(State.COMMITTED);
+    drainQueuedContexts();
   }
 
   private void drainQueuedContexts() {
     final var queuedContexts = map.getQueuedContexts();
     while (true) {
       final var oldest = queuedContexts.peekFirst();
-      if (oldest != null && oldest.state != State.OPEN) {
-        queuedContexts.removeFirst();
+      if (oldest != null && oldest.state.get() != State.OPEN) {
+        queuedContexts.remove(oldest);
       } else {
         break;
       }
@@ -244,20 +241,18 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
   private void rollbackFromCommitAttempt(SortedMap<MutexRef<Mutex>, LockModeAndState> combinedMutexes) {
     releaseMutexes(combinedMutexes);
     map.getOpenContexts().remove(this);
-    synchronized (map.getContextLock()) {
-      state = State.ROLLED_BACK;
-      drainQueuedContexts();
-    }
+    state.set(State.ROLLED_BACK);
+    drainQueuedContexts();
   }
 
   @Override
   public State getState() {
-    return state;
+    return state.get();
   }
 
   @Override
   public long getVersion() {
-    if (state != State.OPEN) {
+    if (state.get() != State.OPEN) {
       throw new IllegalStateException("Transaction is not committed");
     }
     return writeVersion;

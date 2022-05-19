@@ -44,10 +44,10 @@ public final class Harness {
 
   private static final RunOptions RUN_OPTIONS = new RunOptions() {{
     thinkTimeMs = 0;
-    numAccounts = 10_000;
+    numAccounts = 1_000;
     initialBalance = 100;
     maxXferAmount = 100;
-    scanAccounts = 10;
+    scanAccounts = 100;
     numThreads = 16;
     numOpsPerThread = 1_000;
   }};
@@ -80,7 +80,7 @@ public final class Harness {
       } else if (e instanceof AntidependencyFailure) {
         antidependencyFailures.incrementAndGet();
       } else {
-        throw new UnsupportedOperationException("Unsupported concurrent mode failure " + e.getClass());
+        throw new UnsupportedOperationException("Unsupported concurrent mode failure type " + e.getClass().getName());
       }
     }
   }
@@ -180,7 +180,7 @@ public final class Harness {
     for (var i = 0; i < PROFILES.length; i++) {
       System.out.format("- Workload %d of %d...\n", i + 1, PROFILES.length);
       final var result = runOne(mapFactory, RUN_OPTIONS, PROFILES[i], MIN_DURATION_MS);
-      dumpResult(result, RUN_OPTIONS, PROFILES[i]);
+      dumpResult(result, PROFILES[i]);
     }
   }
 
@@ -239,13 +239,14 @@ public final class Harness {
     }
   }
 
-  private static void dumpResult(RunResult result, RunOptions options, double[] profile) {
-    dumpSummary(result, options);
+  private static void dumpResult(RunResult result, double[] profile) {
+    dumpSummary(result, profile);
     System.out.println();
-    dumpDetail(result, options, profile);
+    dumpDetail(result, profile);
+    System.out.println();
   }
 
-  private static void dumpDetail(RunResult result, RunOptions options, double[] profile) {
+  private static void dumpDetail(RunResult result, double[] profile) {
     final int[] padding = {15, 10, 15, 15};
     System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)");
     System.out.format(layout(padding), fill(padding, '-'));
@@ -266,15 +267,17 @@ public final class Harness {
                       String.format("%,.0f", 1000f * totalOps / result.elapsedMs));
   }
 
-  private static void dumpSummary(RunResult result, RunOptions options) {
-    final int[] padding = {15, 15, 15, 15, 17, 23};
-    System.out.format(layout(padding), "Took (s)", "Ops", "Rate (op/s)", "Mutex failures", "Snapshot failures", "Antidependency failures");
-    System.out.format(layout(padding), fill(padding, ' '));
-    final var ops = options.numThreads * options.numOpsPerThread;
+  private static void dumpSummary(RunResult result, double[] profile) {
+    final int[] padding = {15, 15, 15, 15, 15, 17, 23};
+    System.out.format(layout(padding), "Profile", "Took (s)", "Ops", "Rate (op/s)", "Mutex failures", "Snapshot failures", "Antidependency failures");
+    System.out.format(layout(padding), fill(padding, '-'));
+    final var counters = result.workload.getCounters();
+    final var totalOps = Arrays.stream(counters).mapToLong(AtomicLong::get).sum();
     System.out.format(layout(padding),
+                      Arrays.toString(profile),
                       String.format("%,.3f", result.elapsedMs / 1000f),
-                      String.format("%,d", ops),
-                      String.format("%,.0f", 1000f * ops / result.elapsedMs),
+                      String.format("%,d", totalOps),
+                      String.format("%,.0f", 1000f * totalOps / result.elapsedMs),
                       String.format("%,d", result.state.mutexFailures.get()),
                       String.format("%,d", result.state.snapshotFailures.get()),
                       String.format("%,d", result.state.antidependencyFailures.get()));
