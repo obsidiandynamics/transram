@@ -52,7 +52,7 @@ public final class Harness {
     numOpsPerThread = 1_000;
   }};
 
-  private static final long MIN_DURATION_MS = 60_000;
+  private static final long MIN_DURATION_MS = 5_000;
 
   private static final double WARMUP_FRACTION = 0.1;
 
@@ -251,13 +251,6 @@ public final class Harness {
     return new RunResult(took, workload, state);
   }
 
-  //  private static void dumpResult(RunResult result, double[] profile) {
-  //    dumpSummary(result, profile);
-  //    System.out.println();
-  //    dumpDetail(result, profile);
-  //    System.out.println();
-  //  }
-
   private static void dumpDetail(RunResult result, double[] profile) {
     final int[] padding = {15, 10, 15, 15};
     System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)");
@@ -280,14 +273,15 @@ public final class Harness {
   }
 
   private static void dumpSummaries(RunResult[] results, double[][] profiles) {
-    final int[] padding = {15, 15, 15, 15, 15, 17, 23};
-    System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex failures", "snapshot failures", "antidependency failures");
+    final int[] padding = {15, 15, 15, 15, 15, 17, 23, 10};
+    System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex failures", "snapshot failures", "antidependency failures", "efficiency");
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];
       final var profile = profiles[i];
       final var counters = result.workload.getCounters();
       final var totalOps = Arrays.stream(counters).mapToLong(AtomicLong::get).sum();
+      final var totalFailures = result.state.mutexFailures.get() + result.state.snapshotFailures.get() + result.state.antidependencyFailures.get();
       System.out.format(layout(padding),
                         Arrays.toString(profile),
                         String.format("%,.3f", result.elapsedMs / 1000f),
@@ -295,7 +289,8 @@ public final class Harness {
                         String.format("%,.0f", 1000f * totalOps / result.elapsedMs),
                         String.format("%,d", result.state.mutexFailures.get()),
                         String.format("%,d", result.state.snapshotFailures.get()),
-                        String.format("%,d", result.state.antidependencyFailures.get()));
+                        String.format("%,d", result.state.antidependencyFailures.get()),
+                        String.format("%,.3f", (double) totalOps / (totalOps + totalFailures)));
     }
   }
 
