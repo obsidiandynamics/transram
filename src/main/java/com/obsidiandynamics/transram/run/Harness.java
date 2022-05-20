@@ -19,7 +19,6 @@ public final class Harness {
     int maxXferAmount;
     int scanAccounts;
     int numThreads;
-    int numOpsPerThread;
     boolean log = false;
 
     void validate() {
@@ -29,7 +28,6 @@ public final class Harness {
       Assert.that(maxXferAmount > 0);
       Assert.that(scanAccounts > 0);
       Assert.that(numThreads > 0);
-      Assert.that(numOpsPerThread > 0);
     }
 
     @Override
@@ -49,7 +47,6 @@ public final class Harness {
     maxXferAmount = 100;
     scanAccounts = 100;
     numThreads = 16;
-    numOpsPerThread = 1_000;
   }};
 
   private static final long MIN_DURATION_MS = 5_000;
@@ -61,6 +58,8 @@ public final class Harness {
       {0.5, 0.0, 0.5},
       {0.9, 0.0, 0.1}
   };
+
+  private static final int INIT_OPS_PER_THREAD = 1_000;
 
   private static class State {
     final TransMap<Integer, Account> map;
@@ -172,10 +171,8 @@ public final class Harness {
   public static void run(Supplier<TransMap<Integer, Account>> mapFactory) throws InterruptedException {
     System.out.format("Running benchmarks for %s...\n",  mapFactory.get().getClass().getSimpleName());
     System.out.format("- Warmup...\n");
-    final var warmupOptions = RUN_OPTIONS.clone();
-    warmupOptions.numOpsPerThread *= WARMUP_FRACTION;
     final var warmupProfile = new double[]{0.33, 0.33, 0.34};
-    runOne(mapFactory, warmupOptions, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION));
+    runOne(mapFactory, RUN_OPTIONS, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION));
 
     final var results = new RunResult[PROFILES.length];
     for (var i = 0; i < PROFILES.length; i++) {
@@ -224,7 +221,7 @@ public final class Harness {
     for (var i = 0; i < options.numThreads; i++) {
       new Thread(() -> {
         final var rnd = new SplittableRandom();
-        var opsPerThread = options.numOpsPerThread;
+        var opsPerThread = INIT_OPS_PER_THREAD;
         var op = 0;
         while (true) {
           final var opcode = Opcode.values()[workload.eval(rnd.nextDouble())];
