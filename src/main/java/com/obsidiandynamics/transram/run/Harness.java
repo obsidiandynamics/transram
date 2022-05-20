@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static com.obsidiandynamics.transram.util.Table.*;
 
@@ -224,8 +225,9 @@ public final class Harness {
         var opsPerThread = INIT_OPS_PER_THREAD;
         var op = 0;
         while (true) {
-          final var opcode = Opcode.values()[workload.eval(rnd.nextDouble())];
-          opcode.operate(state, rnd, options);
+          workload.eval(rnd.nextDouble(), ordinal -> {
+            Opcode.values()[ordinal].operate(state, rnd, options);
+          });
           if (++op == opsPerThread) {
             final var took = System.currentTimeMillis() - startTime;
             if (took < minDurationMs) {
@@ -249,24 +251,28 @@ public final class Harness {
   }
 
   private static void dumpDetail(RunResult result, double[] profile) {
-    final int[] padding = {15, 10, 15, 15};
-    System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)");
+    final int[] padding = {15, 10, 15, 15, 15};
+    System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)", "ns/op");
     System.out.format(layout(padding), fill(padding, '-'));
-    final var counters = result.workload.getCounters();
+    final var stopwatches = result.workload.getStopwatches();
+    final var totalOps = Arrays.stream(stopwatches).mapToLong(Stopwatch::getNumSamples).sum();
     for (var opcode : Opcode.values()) {
+      final var stopwatch = stopwatches[opcode.ordinal()];
       System.out.format(layout(padding),
                         opcode,
                         String.format("%,.3f", profile[opcode.ordinal()]),
-                        String.format("%,d", counters[opcode.ordinal()].get()),
-                        String.format("%,.0f", 1000f * counters[opcode.ordinal()].get() / result.elapsedMs));
+                        String.format("%,d", stopwatch.getNumSamples()),
+                        stopwatch.hasSamples() ? String.format("%,.0f", 1_000_000_000 / stopwatch.getMeanDuration()) : '-',
+                        stopwatch.hasSamples() ? String.format("%,.0f", stopwatch.getMeanDuration()) : '-');
     }
+
     System.out.format(layout(padding), fill(padding, ' '));
-    final var totalOps = Arrays.stream(counters).mapToLong(AtomicLong::get).sum();
     System.out.format(layout(padding),
                       "TOTAL",
                       String.format("%,.3f", 1.0),
                       String.format("%,d", totalOps),
-                      String.format("%,.0f", 1000f * totalOps / result.elapsedMs));
+                      String.format("%,.0f", 1000f * totalOps / result.elapsedMs),
+                      String.format("%,.0f", result.elapsedMs * 1_000_000f / totalOps));
   }
 
   private static void dumpSummaries(RunResult[] results, double[][] profiles) {
@@ -276,8 +282,8 @@ public final class Harness {
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];
       final var profile = profiles[i];
-      final var counters = result.workload.getCounters();
-      final var totalOps = Arrays.stream(counters).mapToLong(AtomicLong::get).sum();
+      final var counters = result.workload.getStopwatches();
+      final var totalOps = Arrays.stream(counters).mapToLong(Stopwatch::getNumSamples).sum();
       final var totalFailures = result.state.mutexFailures.get() + result.state.snapshotFailures.get() + result.state.antidependencyFailures.get();
       System.out.format(layout(padding),
                         Arrays.toString(profile),

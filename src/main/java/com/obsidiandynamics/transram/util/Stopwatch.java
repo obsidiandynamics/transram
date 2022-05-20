@@ -29,10 +29,21 @@ public final class Stopwatch {
     return samples.get();
   }
 
-  public double getMeanDuration() {
+  public double getTotalDuration() {
     final var numSamples = samples.get();
-    final var totalAdjDuration = duration.get() - cost * numSamples;
-    return totalAdjDuration / numSamples;
+    return duration.get() - cost * numSamples;
+  }
+
+  public double getMeanDuration() {
+    return getTotalDuration() / samples.get();
+  }
+
+  public double getMeanRate() {
+    return samples.get() / getTotalDuration();
+  }
+
+  public boolean hasSamples() {
+    return samples.get() != 0;
   }
 
   public static final class Calibration {
@@ -56,7 +67,7 @@ public final class Stopwatch {
             System.out.format("- Measurement...\n");
             cost = calibrate((long) (CALIBRATION_TIME_MS * (1.0 - CALIBRATION_WARMUP_FRACTION)));
             System.out.format("--- Invocation cost is %,.3f ns\n", cost);
-            Files.write(file.toPath(), List.of(cost + ""), StandardOpenOption.CREATE);
+            Files.write(file.toPath(), List.of(String.valueOf(cost)), StandardOpenOption.CREATE);
           }
         } catch (IOException e) {
           throw new RuntimeException(e);

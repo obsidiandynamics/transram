@@ -74,19 +74,21 @@ public class RunUpgradeableLockWorkload {
     final var latch = new CountDownLatch(NUM_THREADS);
     final var startTime = System.currentTimeMillis();
     final var workload = new Workload(PROFILE);
-    for (int i = 0; i < NUM_THREADS; i++) {
+    for (var i = 0; i < NUM_THREADS; i++) {
       new Thread(() -> {
         final var random = new SplittableRandom();
         try {
-          for (int j = 0; j < NUM_OPS_PER_THREAD; j++) {
+          for (var j = 0; j < NUM_OPS_PER_THREAD; j++) {
             final var rnd = random.nextDouble();
-            final var opcode = Opcode.values()[workload.eval(rnd)];
-            opcode.operate(state);
-//            if (false) throw new InterruptedException("");
+            workload.eval(rnd, ordinal -> {
+              try {
+                Opcode.values()[ordinal].operate(state);
+              } catch (InterruptedException e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+              }
+            });
           }
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-          throw new RuntimeException(e);
         } catch (Throwable e) {
           e.printStackTrace();
         } finally {
@@ -97,8 +99,8 @@ public class RunUpgradeableLockWorkload {
 
     latch.await();
     final var took = System.currentTimeMillis() - startTime;
-    final var counters = workload.getCounters();
-    final var expectedValue = counters[Opcode.WRITE.ordinal()].get() + counters[Opcode.UPGRADE.ordinal()].get() + counters[Opcode.DOWNGRADE.ordinal()].get();
+    final var stopwatches = workload.getStopwatches();
+    final var expectedValue = stopwatches[Opcode.WRITE.ordinal()].getNumSamples() + stopwatches[Opcode.UPGRADE.ordinal()].getNumSamples() + stopwatches[Opcode.DOWNGRADE.ordinal()].getNumSamples();
     Assert.that(expectedValue == state.value, () -> String.format("Expected: %d, actual: %d", expectedValue, state.value));
     final int[] padding = {10, 10, 15, 15};
     System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)");
@@ -107,11 +109,11 @@ public class RunUpgradeableLockWorkload {
       System.out.format(layout(padding),
                         opcode,
                         String.format("%,.3f", PROFILE[opcode.ordinal()]),
-                        String.format("%,d", counters[opcode.ordinal()].get()),
-                        String.format("%,.0f", 1000f * counters[opcode.ordinal()].get() / took));
+                        String.format("%,d", stopwatches[opcode.ordinal()].getNumSamples()),
+                        String.format("%,.0f", 1000f * stopwatches[opcode.ordinal()].getNumSamples() / took));
     }
     System.out.format(layout(padding), fill(padding, ' '));
-    final var totalOps = Arrays.stream(counters).mapToLong(AtomicLong::get).sum();
+    final var totalOps = Arrays.stream(stopwatches).mapToLong(Stopwatch::getNumSamples).sum();
     System.out.format(layout(padding),
                       "TOTAL",
                       String.format("%,.3f", 1.0),

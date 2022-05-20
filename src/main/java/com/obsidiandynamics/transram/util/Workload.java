@@ -1,17 +1,19 @@
 package com.obsidiandynamics.transram.util;
 
+import com.obsidiandynamics.transram.util.Stopwatch.*;
+
 import java.util.*;
-import java.util.concurrent.atomic.*;
+import java.util.function.*;
 
 public final class Workload {
   private final double[] probs;
 
   private final double[] cumulative;
 
-  private final AtomicLong[] counters;
+  private final Stopwatch[] stopwatches;
 
   public Workload(double[] probs) {
-    Assert.that(Math.abs(Arrays.stream(probs).sum() - 1) < Double.MIN_VALUE, () -> "Ensure probabilities add to 1");
+    Assert.that(Math.abs(Arrays.stream(probs).sum() - 1) < Double.MIN_VALUE, () -> "Ensure probabilities sum to 1");
     this.probs = probs;
     cumulative = new double[probs.length - 1];
     var sum = 0d;
@@ -19,9 +21,9 @@ public final class Workload {
       sum += probs[i];
       cumulative[i] = sum;
     }
-    counters = new AtomicLong[probs.length];
-    for (var i = 0; i < counters.length; i++) {
-      counters[i] = new AtomicLong();
+    stopwatches = new Stopwatch[probs.length];
+    for (var i = 0; i < stopwatches.length; i++) {
+      stopwatches[i] = new Stopwatch(Calibration.init());
     }
   }
 
@@ -29,23 +31,27 @@ public final class Workload {
     return probs;
   }
 
-  public AtomicLong[] getCounters() {
-    return counters;
+  public Stopwatch[] getStopwatches() {
+    return stopwatches;
   }
 
-  public int eval(double rnd) {
+  public int eval(double rnd, IntConsumer runner) {
+    var selected = 0;
     for (var i = cumulative.length - 1; i >= 0; i--) {
       if (rnd > cumulative[i]) {
-        counters[i + 1].incrementAndGet();
-        return i + 1;
+        selected = i + 1;
+        break;
       }
     }
-    counters[0].incrementAndGet();
-    return 0;
+    final var stopwatch = stopwatches[selected];
+    stopwatch.start();
+    runner.accept(selected);
+    stopwatch.stop();
+    return selected;
   }
 
   @Override
   public String toString() {
-    return Workload.class.getSimpleName() + "[probs=" + Arrays.toString(probs) + ", counters=" + Arrays.toString(counters) + ']';
+    return Workload.class.getSimpleName() + "[probs=" + Arrays.toString(probs) + ", counters=" + Arrays.toString(stopwatches) + ']';
   }
 }
