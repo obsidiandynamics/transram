@@ -270,8 +270,8 @@ public final class Harness {
   }
 
   private static void dumpSummaries(RunResult[] results, double[][] profiles) {
-    final int[] padding = {15, 15, 15, 15, 15, 17, 23, 10};
-    System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex failures", "snapshot failures", "antidependency failures", "efficiency");
+    final int[] padding = {15, 15, 15, 15, 13, 15, 15, 10};
+    System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "efficiency");
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];

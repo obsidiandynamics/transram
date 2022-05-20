@@ -1,6 +1,7 @@
 .gradle
 .idea
 build
+/.calibration
 
 # Compiled class file
 *.class
