@@ -4,6 +4,7 @@ import com.obsidiandynamics.transram.mutex.*;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 import java.util.function.*;
 
 public final class Srml2Map<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
@@ -23,6 +24,8 @@ public final class Srml2Map<K, V extends DeepCloneable<V>> implements TransMap<K
   private final Deque<Srml2Context<K, V>> queuedContexts = new ConcurrentLinkedDeque<>();
 
   private long version;
+
+  private final AtomicLong safeReadVersion = new AtomicLong();
 
   public Srml2Map(Options options) {
     mutexes = new StripedMutexes<>(options.mutexStripes, options.mutexFactory);
@@ -63,4 +66,6 @@ public final class Srml2Map<K, V extends DeepCloneable<V>> implements TransMap<K
   long incrementAndGetVersion() {
     return ++version;
   }
+
+  AtomicLong safeReadVersion() { return safeReadVersion; }
 }

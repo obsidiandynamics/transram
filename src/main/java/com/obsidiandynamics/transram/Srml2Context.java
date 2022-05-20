@@ -30,21 +30,23 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
     this.map = map;
 
     map.getOpenContexts().add(this);
-    final boolean hadQueued;
-    synchronized (map.getContextLock()) {
-      final var oldestQueuedContext = map.getQueuedContexts().peekFirst();
-      if (oldestQueuedContext != null) {
-        hadQueued = true;
-        readVersion = oldestQueuedContext.writeVersion - 1;
-      } else {
-        hadQueued = false;
-        readVersion = map.getVersion();
-      }
-    }
-
-    if (hadQueued) {
-      peerContexts.addAll(map.getQueuedContexts());
-    }
+    readVersion = map.safeReadVersion().get();
+    peerContexts.addAll(map.getQueuedContexts());
+//    final boolean hadQueued;
+//    synchronized (map.getContextLock()) {
+//      final var oldestQueuedContext = map.getQueuedContexts().peekFirst();
+//      if (oldestQueuedContext != null) {
+//        hadQueued = true;
+//        readVersion = oldestQueuedContext.writeVersion - 1;
+//      } else {
+//        hadQueued = false;
+//        readVersion = map.getVersion();
+//      }
+//    }
+//
+//    if (hadQueued) {
+//      peerContexts.addAll(map.getQueuedContexts());
+//    }
   }
 
   private Versioned<V> findAmongPeers(K key) {
@@ -215,12 +217,28 @@ public final class Srml2Context<K, V extends DeepCloneable<V>> implements TransC
 
   private void drainQueuedContexts() {
     final var queuedContexts = map.getQueuedContexts();
+    long highestVersionPurged = 0;
     while (true) {
       final var oldest = queuedContexts.peekFirst();
       if (oldest != null && oldest.state.get() != State.OPEN) {
         queuedContexts.remove(oldest);
+        highestVersionPurged = oldest.writeVersion;
       } else {
         break;
+      }
+    }
+
+    if (highestVersionPurged != 0) {
+      while (true) {
+        final var existingSafeReadVersion = map.safeReadVersion().get();
+        if (highestVersionPurged > existingSafeReadVersion) {
+          final var updated = map.safeReadVersion().compareAndSet(existingSafeReadVersion, highestVersionPurged);
+          if (updated) {
+            break;
+          }
+        } else {
+          break;
+        }
       }
     }
   }
