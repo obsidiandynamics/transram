@@ -38,10 +38,6 @@ public final class Stopwatch {
     return getTotalDuration() / samples.get();
   }
 
-  public double getMeanRate() {
-    return samples.get() / getTotalDuration();
-  }
-
   public boolean hasSamples() {
     return samples.get() != 0;
   }

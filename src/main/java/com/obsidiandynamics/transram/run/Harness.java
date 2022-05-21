@@ -50,7 +50,7 @@ public final class Harness {
     numThreads = 16;
   }};
 
-  private static final long MIN_DURATION_MS = 5_000;
+  private static final long MIN_DURATION_MS = 1_000;
 
   private static final double WARMUP_FRACTION = 0.1;
 
@@ -276,8 +276,8 @@ public final class Harness {
   }
 
   private static void dumpSummaries(RunResult[] results, double[][] profiles) {
-    final int[] padding = {15, 15, 15, 15, 13, 15, 15, 10};
-    System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "efficiency");
+    final int[] padding = {15, 15, 15, 15, 13, 15, 15, 10, 10};
+    System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "efficiency", "refs");
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];
@@ -293,18 +293,19 @@ public final class Harness {
                         String.format("%,d", result.state.mutexFailures.get()),
                         String.format("%,d", result.state.snapshotFailures.get()),
                         String.format("%,d", result.state.antidependencyFailures.get()),
-                        String.format("%,.3f", (double) totalOps / (totalOps + totalFailures)));
+                        String.format("%,.3f", (double) totalOps / (totalOps + totalFailures)),
+                        String.format("%,d", result.state.map.debug().numRefs()));
     }
   }
 
   private static void dumpMap(TransMap<?, Account> map) {
-    for (var entry : map.dirtyView().entrySet()) {
+    for (var entry : map.debug().dirtyView().entrySet()) {
       System.out.format("%10s:%s\n", entry.getKey(), entry.getValue());
     }
   }
 
   private static void checkMapSum(TransMap<?, Account> map, RunOptions options) {
-    final var sum = (Long) map.dirtyView().values().stream().map(Versioned::getValue).mapToLong(Account::getBalance).sum();
+    final var sum = map.debug().dirtyView().values().stream().map(Versioned::getValue).mapToLong(Account::getBalance).sum();
     final var expectedSum = options.numAccounts * options.initialBalance;
     Assert.that(expectedSum == sum, () -> String.format("Expected: %d, actual: %d", expectedSum, sum));
   }

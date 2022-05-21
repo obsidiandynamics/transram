@@ -42,10 +42,20 @@ public final class Srml2Map<K, V extends DeepCloneable<V>> implements TransMap<K
     return store;
   }
 
+  private final Debug<K, V> debug = new Debug<>() {
+    @Override
+    public Map<K, Versioned<V>> dirtyView() {
+      return Map.copyOf(store);
+    }
+
+    @Override
+    public int numRefs() {
+      return store.size();
+    }
+  };
+
   @Override
-  public Map<K, Versioned<V>> dirtyView() {
-    return Map.copyOf(store);
-  }
+  public Debug<K, V> debug() { return debug; }
 
   StripedMutexes<Mutex> getMutexes() {
     return mutexes;

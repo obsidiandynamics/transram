@@ -8,7 +8,7 @@ public class RunSrml3Workload {
     Harness.run(() -> new Srml3Map<>(new Srml3Map.Options() {{
       mutexStripes = 1024;
       mutexFactory = UnfairUpgradeableMutex::new;
-      queueDepth = 16;
+      queueDepth = 4;
     }}));
   }
 }

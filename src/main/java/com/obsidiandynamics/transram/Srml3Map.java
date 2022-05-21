@@ -11,7 +11,7 @@ public final class Srml3Map<K, V extends DeepCloneable<V>> implements TransMap<K
   public static class Options {
     public int mutexStripes = 1024;
     public Supplier<UpgradeableMutex> mutexFactory = UnfairUpgradeableMutex::new;
-    public int queueDepth = 16;
+    public int queueDepth = 4;
   }
 
   private final int queueDepth;
@@ -48,14 +48,24 @@ public final class Srml3Map<K, V extends DeepCloneable<V>> implements TransMap<K
     return store;
   }
 
-  @Override
-  public Map<K, Versioned<V>> dirtyView() {
-    final var copy = new HashMap<K, Versioned<V>>(store.size());
-    for (var entry : store.entrySet()) {
-      copy.put(entry.getKey(), entry.getValue().getFirst());
+  private final Debug<K, V> debug = new Debug<>() {
+    @Override
+    public Map<K, Versioned<V>> dirtyView() {
+      final var copy = new HashMap<K, Versioned<V>>(store.size());
+      for (var entry : store.entrySet()) {
+        copy.put(entry.getKey(), entry.getValue().getFirst());
+      }
+      return copy;
     }
-    return copy;
-  }
+
+    @Override
+    public int numRefs() {
+      return store.values().stream().mapToInt(Deque::size).sum();
+    }
+  };
+
+  @Override
+  public Debug<K, V> debug() { return debug; }
 
   StripedMutexes<Mutex> getMutexes() {
     return mutexes;
