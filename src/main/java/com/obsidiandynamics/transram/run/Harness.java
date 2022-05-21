@@ -8,12 +8,11 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
-import java.util.stream.*;
 
 import static com.obsidiandynamics.transram.util.Table.*;
 
 public final class Harness {
-  private static class RunOptions implements Cloneable {
+  private static class RunOptions {
     int thinkTimeMs = -1;
     int numAccounts;
     int initialBalance;
@@ -30,15 +29,6 @@ public final class Harness {
       Assert.that(scanAccounts > 0);
       Assert.that(numThreads > 0);
     }
-
-    @Override
-    public RunOptions clone() {
-      try {
-        return (RunOptions) super.clone();
-      } catch (CloneNotSupportedException e) {
-        throw new UnsupportedOperationException(e);
-      }
-    }
   }
 
   private static final RunOptions RUN_OPTIONS = new RunOptions() {{
@@ -50,15 +40,20 @@ public final class Harness {
     numThreads = 16;
   }};
 
-  private static final long MIN_DURATION_MS = 1_000;
+  private static final long MIN_DURATION_MS = 5_000;
 
   private static final double WARMUP_FRACTION = 0.1;
 
-  private static final double[][] PROFILES = {
-      {0.1, 0.0, 0.9},
-      {0.5, 0.0, 0.5},
-      {0.9, 0.0, 0.1}
-  };
+//  private static final double[][] PROFILES = {
+//      {0.06, 0.04, 0.6, 0.3},
+//      {0.3, 0.2, 0.3, 0.2},
+//      {0.6, 0.3, 0.06, 0.04}
+//  };
+private static final double[][] PROFILES = {
+    {0.1, 0.0, 0.6, 0.3},
+    {0.5, 0.0, 0.3, 0.2},
+    {0.9, 0.0, 0.06, 0.04}
+};
 
   private static final int INIT_OPS_PER_THREAD = 1_000;
 
@@ -95,8 +90,7 @@ public final class Harness {
             .transact(ctx -> {
               for (var i = 0; i < options.scanAccounts; i++) {
                 final var accountId = i + firstAccountId;
-                final var account = ctx.read(accountId % options.numAccounts);
-                Assert.that(account != null, () -> String.format("Account %d was null", accountId));
+                ctx.read(accountId % options.numAccounts);
               }
               think(options.thinkTimeMs);
               return Action.ROLLBACK;
@@ -113,8 +107,7 @@ public final class Harness {
             .transact(ctx -> {
               for (var i = 0; i < options.scanAccounts; i++) {
                 final var accountId = i + firstAccountId;
-                final var account = ctx.read(accountId % options.numAccounts);
-                Assert.that(account != null, () -> String.format("Account %d was null", accountId));
+                ctx.read(accountId % options.numAccounts);
               }
               think(options.thinkTimeMs);
               return Action.COMMIT;
@@ -136,21 +129,72 @@ public final class Harness {
               }
               if (options.log) System.out.format("%s, fromAccountId=%d, toAccountId=%d, amount=%d\n", Thread.currentThread().getName(), fromAccountId, toAccountId, amount);
               final var fromAccount = ctx.read(fromAccountId);
+              if (fromAccount == null) {
+                return Action.ROLLBACK_AND_RESET;
+              }
               final var toAccount = ctx.read(toAccountId);
+              if (toAccount == null) {
+                return Action.ROLLBACK_AND_RESET;
+              }
 
-              Assert.that(fromAccount != null, () -> String.format("Account (from) %d is null", fromAccountId));
               final var newFromBalance = fromAccount.getBalance() - amount;
               if (newFromBalance < 0) {
                 return Action.ROLLBACK_AND_RESET;
               }
 
               fromAccount.setBalance(newFromBalance);
-              Assert.that(toAccount != null, () -> String.format("Account (to) %d is null", toAccountId));
               toAccount.setBalance(toAccount.getBalance() + amount);
 
               ctx.write(fromAccountId, fromAccount);
               ctx.write(toAccountId, toAccount);
               think(options.thinkTimeMs);
+              return Action.COMMIT;
+            });
+      }
+    },
+
+    SPLIT_MERGE {
+      @Override
+      void operate(State state, SplittableRandom rnd, RunOptions options) {
+        Enclose.over(state.map)
+            .onFailure(state::classifyFailure)
+            .transact(ctx -> {
+              final var accountAId = (int) (rnd.nextDouble() * options.numAccounts);
+              final var accountBId = (int) (rnd.nextDouble() * options.numAccounts);
+              if (accountAId == accountBId) {
+                return Action.ROLLBACK_AND_RESET;
+              }
+              final var accountA = ctx.read(accountAId);
+              final var accountB = ctx.read(accountBId);
+              if (accountA == null && accountB == null) {
+                return Action.ROLLBACK_AND_RESET;
+              } else if (accountA == null) {
+                if (accountB.getBalance() == 0) {
+                  return Action.ROLLBACK_AND_RESET;
+                }
+                final var xferAmount = 1 + (int) (rnd.nextDouble() * (accountB.getBalance() - 1));
+                final var newAccountA = new Account(accountAId, xferAmount);
+                ctx.write(accountAId, newAccountA);
+                accountB.setBalance(accountB.getBalance() - xferAmount);
+                ctx.write(accountBId, accountB);
+              } else if (accountB == null) {
+                if (accountA.getBalance() == 0) {
+                  return Action.ROLLBACK_AND_RESET;
+                }
+                final var xferAmount = 1 + (int) (rnd.nextDouble() * (accountA.getBalance() - 1));
+                final var newAccountB = new Account(accountBId, xferAmount);
+                ctx.write(accountBId, newAccountB);
+                accountA.setBalance(accountA.getBalance() - xferAmount);
+                ctx.write(accountAId, accountA);
+              } else if (rnd.nextDouble() > 0.5){
+                accountA.setBalance(accountA.getBalance() + accountB.getBalance());
+                ctx.write(accountAId, accountA);
+                ctx.write(accountBId, null);
+              } else {
+                accountB.setBalance(accountA.getBalance() + accountB.getBalance());
+                ctx.write(accountBId, accountB);
+                ctx.write(accountAId, null);
+              }
               return Action.COMMIT;
             });
       }
@@ -225,9 +269,7 @@ public final class Harness {
         var opsPerThread = INIT_OPS_PER_THREAD;
         var op = 0;
         while (true) {
-          workload.eval(rnd.nextDouble(), ordinal -> {
-            Opcode.values()[ordinal].operate(state, rnd, options);
-          });
+          workload.eval(rnd.nextDouble(), ordinal -> Opcode.values()[ordinal].operate(state, rnd, options));
           if (++op == opsPerThread) {
             final var took = System.currentTimeMillis() - startTime;
             if (took < minDurationMs) {
@@ -276,7 +318,7 @@ public final class Harness {
   }
 
   private static void dumpSummaries(RunResult[] results, double[][] profiles) {
-    final int[] padding = {15, 15, 15, 15, 13, 15, 15, 10, 10};
+    final int[] padding = {25, 15, 15, 15, 13, 15, 15, 10, 10};
     System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "efficiency", "refs");
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
@@ -305,8 +347,11 @@ public final class Harness {
   }
 
   private static void checkMapSum(TransMap<?, Account> map, RunOptions options) {
-    final var sum = map.debug().dirtyView().values().stream().map(Versioned::getValue).mapToLong(Account::getBalance).sum();
+    final var values = map.debug().dirtyView().values();
+    final var sum = values.stream().filter(Versioned::hasValue).map(Versioned::getValue).mapToLong(Account::getBalance).sum();
     final var expectedSum = options.numAccounts * options.initialBalance;
     Assert.that(expectedSum == sum, () -> String.format("Expected: %d, actual: %d", expectedSum, sum));
+    final var min = values.stream().filter(Versioned::hasValue).map(Versioned::getValue).mapToLong(Account::getBalance).min().orElseThrow();
+    Assert.that(min >= 0, () -> String.format("Minimum balance is %d", min));
   }
 }
