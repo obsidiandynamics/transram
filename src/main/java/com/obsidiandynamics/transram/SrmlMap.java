@@ -7,7 +7,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
 
-public final class Srml3Map<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
+public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
   public static class Options {
     public int mutexStripes = 1024;
     public Supplier<UpgradeableMutex> mutexFactory = UnfairUpgradeableMutex::new;
@@ -22,13 +22,13 @@ public final class Srml3Map<K, V extends DeepCloneable<V>> implements TransMap<K
 
   private final Object contextLock = new Object();
 
-  private final Deque<Srml3Context<K, V>> queuedContexts = new ConcurrentLinkedDeque<>();
+  private final Deque<SrmlContext<K, V>> queuedContexts = new ConcurrentLinkedDeque<>();
 
   private long version;
 
   private final AtomicLong safeReadVersion = new AtomicLong();
 
-  public Srml3Map(Options options) {
+  public SrmlMap(Options options) {
     queueDepth = options.queueDepth;
     mutexes = new StripedMutexes<>(options.mutexStripes, options.mutexFactory);
   }
@@ -38,8 +38,8 @@ public final class Srml3Map<K, V extends DeepCloneable<V>> implements TransMap<K
   }
 
   @Override
-  public Srml3Context<K, V> transact() {
-    return new Srml3Context<>(this);
+  public SrmlContext<K, V> transact() {
+    return new SrmlContext<>(this);
   }
 
   Object getContextLock() { return contextLock; }
@@ -71,7 +71,7 @@ public final class Srml3Map<K, V extends DeepCloneable<V>> implements TransMap<K
     return mutexes;
   }
 
-  Deque<Srml3Context<K, V>> getQueuedContexts() {
+  Deque<SrmlContext<K, V>> getQueuedContexts() {
     return queuedContexts;
   }
 

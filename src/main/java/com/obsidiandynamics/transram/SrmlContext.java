@@ -1,6 +1,5 @@
 package com.obsidiandynamics.transram;
 
-import com.obsidiandynamics.transram.TransContext.*;
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 
@@ -8,8 +7,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
-public final class Srml3Context<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
-  private final Srml3Map<K, V> map;
+public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
+  private final SrmlMap<K, V> map;
 
   private final Set<K> reads = new HashSet<>();
 
@@ -23,7 +22,7 @@ public final class Srml3Context<K, V extends DeepCloneable<V>> implements TransC
 
   private final AtomicReference<State> state = new AtomicReference<>(State.OPEN);
 
-  Srml3Context(Srml3Map<K, V> map) {
+  SrmlContext(SrmlMap<K, V> map) {
     this.map = map;
 
     readVersion = map.safeReadVersion().get();
