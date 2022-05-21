@@ -7,8 +7,8 @@ import com.obsidiandynamics.transram.util.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
-  private final SrmlMap<K, V> map;
+public final class Srml1Context<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
+  private final Srml1Map<K, V> map;
 
   private final Set<K> reads = new HashSet<>();
 
@@ -18,7 +18,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private final long readVersion;
 
-  private final Set<SrmlContext<K, V>> peerContexts = new CopyOnWriteArraySet<>();
+  private final Set<Srml1Context<K, V>> peerContexts = new CopyOnWriteArraySet<>();
 
   private final Map<K, Versioned<V>> backupValues = new ConcurrentHashMap<>();
 
@@ -26,7 +26,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private State state = State.OPEN;
 
-  SrmlContext(SrmlMap<K, V> map) {
+  Srml1Context(Srml1Map<K, V> map) {
     this.map = map;
 
     synchronized (map.getContextLock()) {
