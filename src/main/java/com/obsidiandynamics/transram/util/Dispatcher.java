@@ -5,14 +5,14 @@ import com.obsidiandynamics.transram.util.Stopwatch.*;
 import java.util.*;
 import java.util.function.*;
 
-public final class Workload {
+public final class Dispatcher {
   private final double[] probs;
 
   private final double[] cumulative;
 
   private final Stopwatch[] stopwatches;
 
-  public Workload(double[] probs) {
+  public Dispatcher(double[] probs) {
     Assert.that(Math.abs(Arrays.stream(probs).sum() - 1) < Double.MIN_VALUE, () -> "Ensure probabilities sum to 1");
     this.probs = probs;
     cumulative = new double[probs.length - 1];
@@ -52,6 +52,6 @@ public final class Workload {
 
   @Override
   public String toString() {
-    return Workload.class.getSimpleName() + "[probs=" + Arrays.toString(probs) + ", counters=" + Arrays.toString(stopwatches) + ']';
+    return Dispatcher.class.getSimpleName() + "[probs=" + Arrays.toString(probs) + ", counters=" + Arrays.toString(stopwatches) + ']';
   }
 }

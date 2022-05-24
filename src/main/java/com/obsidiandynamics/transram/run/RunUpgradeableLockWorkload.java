@@ -5,7 +5,6 @@ import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
 
 import static com.obsidiandynamics.transram.util.Table.*;
 
@@ -73,7 +72,7 @@ public class RunUpgradeableLockWorkload {
     final var state = new State();
     final var latch = new CountDownLatch(NUM_THREADS);
     final var startTime = System.currentTimeMillis();
-    final var workload = new Workload(PROFILE);
+    final var workload = new Dispatcher(PROFILE);
     for (var i = 0; i < NUM_THREADS; i++) {
       new Thread(() -> {
         final var random = new SplittableRandom();

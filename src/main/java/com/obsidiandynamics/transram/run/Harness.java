@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 import static com.obsidiandynamics.transram.util.Table.*;
 
@@ -40,20 +41,20 @@ public final class Harness {
     numThreads = 16;
   }};
 
-  private static final long MIN_DURATION_MS = 5_000;
+  private static final long MIN_DURATION_MS = 5_00;
 
   private static final double WARMUP_FRACTION = 0.1;
 
-//  private static final double[][] PROFILES = {
-//      {0.06, 0.04, 0.6, 0.3},
-//      {0.3, 0.2, 0.3, 0.2},
-//      {0.6, 0.3, 0.06, 0.04}
-//  };
-private static final double[][] PROFILES = {
-    {0.1, 0.0, 0.6, 0.3},
-    {0.5, 0.0, 0.3, 0.2},
-    {0.9, 0.0, 0.06, 0.04}
-};
+  //  private static final double[][] PROFILES = {
+  //      {0.06, 0.04, 0.6, 0.3},
+  //      {0.3, 0.2, 0.3, 0.2},
+  //      {0.6, 0.3, 0.06, 0.04}
+  //  };
+  private static final double[][] PROFILES = {
+      {0.1, 0.0, 0.6, 0.3},
+      {0.5, 0.0, 0.3, 0.2},
+      {0.9, 0.0, 0.06, 0.04}
+  };
 
   private static final int INIT_OPS_PER_THREAD = 1_000;
 
@@ -221,7 +222,7 @@ private static final double[][] PROFILES = {
 
     final var results = new RunResult[PROFILES.length];
     for (var i = 0; i < PROFILES.length; i++) {
-      System.out.format("- Workload %d of %d: %s...\n", i + 1, PROFILES.length, Arrays.toString(PROFILES[i]));
+      System.out.format("- Benchmarking profile %d of %d...\n", i + 1, PROFILES.length);
       final var result = runOne(mapFactory, RUN_OPTIONS, PROFILES[i], MIN_DURATION_MS);
       dumpDetail(result, PROFILES[i]);
       System.out.println();
@@ -230,17 +231,19 @@ private static final double[][] PROFILES = {
 
     System.out.println();
     System.out.format("- Summary:\n");
+    dumpdispatchers(Opcode.values(), PROFILES);
+    System.out.println();
     dumpSummaries(results, PROFILES);
   }
 
   private static class RunResult {
     final long elapsedMs;
-    final Workload workload;
+    final Dispatcher dispatcher;
     final State state;
 
-    RunResult(long elapsedMs, Workload workload, State state) {
+    RunResult(long elapsedMs, Dispatcher dispatcher, State state) {
       this.elapsedMs = elapsedMs;
-      this.workload = workload;
+      this.dispatcher = dispatcher;
       this.state = state;
     }
   }
@@ -260,7 +263,7 @@ private static final double[][] PROFILES = {
       });
     }
 
-    final var workload = new Workload(profile);
+    final var dispatcher = new Dispatcher(profile);
     final var latch = new CountDownLatch(options.numThreads);
     final var startTime = System.currentTimeMillis();
     for (var i = 0; i < options.numThreads; i++) {
@@ -269,7 +272,7 @@ private static final double[][] PROFILES = {
         var opsPerThread = INIT_OPS_PER_THREAD;
         var op = 0;
         while (true) {
-          workload.eval(rnd.nextDouble(), ordinal -> Opcode.values()[ordinal].operate(state, rnd, options));
+          dispatcher.eval(rnd.nextDouble(), ordinal -> Opcode.values()[ordinal].operate(state, rnd, options));
           if (++op == opsPerThread) {
             final var took = System.currentTimeMillis() - startTime;
             if (took < minDurationMs) {
@@ -289,14 +292,14 @@ private static final double[][] PROFILES = {
     if (options.log) dumpMap(state.map);
     checkMapSum(state.map, options);
 
-    return new RunResult(took, workload, state);
+    return new RunResult(took, dispatcher, state);
   }
 
   private static void dumpDetail(RunResult result, double[] profile) {
     final int[] padding = {15, 10, 15, 15, 15};
-    System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)", "ns/op");
+    System.out.format(layout(padding), "operation", "p(op)", "ops", "rate (op/s)", "ns/op");
     System.out.format(layout(padding), fill(padding, '-'));
-    final var stopwatches = result.workload.getStopwatches();
+    final var stopwatches = result.dispatcher.getStopwatches();
     final var totalOps = Arrays.stream(stopwatches).mapToLong(Stopwatch::getNumSamples).sum();
     for (var opcode : Opcode.values()) {
       final var stopwatch = stopwatches[opcode.ordinal()];
@@ -317,6 +320,26 @@ private static final double[][] PROFILES = {
                       String.format("%,.0f", result.elapsedMs * 1_000_000f / totalOps));
   }
 
+  private static void dumpdispatchers(Opcode[] opcodes, double[][] profiles) {
+    final var padding = new int[profiles.length + 1];
+    padding[0] = 25;
+    for (var i = 1; i < padding.length; i++) {
+      padding[i] = 5;
+    }
+    final var cols = new ArrayList<String>(padding.length);
+    cols.add("operation\\profile");
+    cols.addAll(IntStream.range(1, profiles.length + 1).boxed().map(String::valueOf).collect(Collectors.toList()));
+    System.out.format(layout(padding), cols.toArray());
+    System.out.format(layout(padding), fill(padding, '-'));
+    for (var opcodeOrdinal = 0; opcodeOrdinal < opcodes.length; opcodeOrdinal++) {
+      cols.set(0, opcodes[opcodeOrdinal].name());
+      for (var profileIdx = 0; profileIdx < profiles.length; profileIdx++) {
+        cols.set(profileIdx + 1, String.valueOf(profiles[profileIdx][opcodeOrdinal]));
+      }
+      System.out.format(layout(padding), cols.toArray());
+    }
+  }
+
   private static void dumpSummaries(RunResult[] results, double[][] profiles) {
     final int[] padding = {25, 15, 15, 15, 13, 15, 15, 10, 10};
     System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "efficiency", "refs");
@@ -324,11 +347,11 @@ private static final double[][] PROFILES = {
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];
       final var profile = profiles[i];
-      final var counters = result.workload.getStopwatches();
+      final var counters = result.dispatcher.getStopwatches();
       final var totalOps = Arrays.stream(counters).mapToLong(Stopwatch::getNumSamples).sum();
       final var totalFailures = result.state.mutexFailures.get() + result.state.snapshotFailures.get() + result.state.antidependencyFailures.get();
       System.out.format(layout(padding),
-                        Arrays.toString(profile),
+                        String.valueOf(i + 1),
                         String.format("%,.3f", result.elapsedMs / 1000f),
                         String.format("%,d", totalOps),
                         String.format("%,.0f", 1000f * totalOps / result.elapsedMs),
