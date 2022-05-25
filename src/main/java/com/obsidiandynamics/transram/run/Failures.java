@@ -5,17 +5,17 @@ import com.obsidiandynamics.transram.*;
 import java.util.concurrent.atomic.*;
 
 public final class Failures {
-  public final AtomicLong mutexFailures = new AtomicLong();
-  public final AtomicLong snapshotFailures = new AtomicLong();
-  public final AtomicLong antidependencyFailures = new AtomicLong();
+  public final AtomicLong mutex = new AtomicLong();
+  public final AtomicLong snapshot = new AtomicLong();
+  public final AtomicLong antidependency = new AtomicLong();
 
-  void classifyFailure(ConcurrentModeFailure e) {
+  public void increment(ConcurrentModeFailure e) {
     if (e instanceof MutexAcquisitionFailure) {
-      mutexFailures.incrementAndGet();
+      mutex.incrementAndGet();
     } else if (e instanceof BrokenSnapshotFailure) {
-      snapshotFailures.incrementAndGet();
+      snapshot.incrementAndGet();
     } else if (e instanceof AntidependencyFailure) {
-      antidependencyFailures.incrementAndGet();
+      antidependency.incrementAndGet();
     } else {
       throw new UnsupportedOperationException("Unsupported concurrent mode failure type " + e.getClass().getName());
     }

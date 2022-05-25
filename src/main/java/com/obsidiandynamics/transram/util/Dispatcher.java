@@ -35,7 +35,7 @@ public final class Dispatcher {
     return stopwatches;
   }
 
-  public int eval(double rnd, IntConsumer runner) {
+  public void eval(double rnd, IntConsumer runner) {
     var selected = 0;
     for (var i = cumulative.length - 1; i >= 0; i--) {
       if (rnd > cumulative[i]) {
@@ -47,7 +47,6 @@ public final class Dispatcher {
     stopwatch.start();
     runner.accept(selected);
     stopwatch.stop();
-    return selected;
   }
 
   @Override

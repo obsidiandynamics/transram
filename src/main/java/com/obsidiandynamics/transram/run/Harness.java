@@ -6,7 +6,6 @@ import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
 import java.util.function.*;
 import java.util.stream.*;
 
@@ -60,34 +59,19 @@ public final class Harness {
 
   private static class State {
     final TransMap<Integer, Account> map;
-    final AtomicLong mutexFailures = new AtomicLong();
-    final AtomicLong snapshotFailures = new AtomicLong();
-    final AtomicLong antidependencyFailures = new AtomicLong();
 
     State(TransMap<Integer, Account> map) {
       this.map = map;
-    }
-
-    void classifyFailure(ConcurrentModeFailure e) {
-      if (e instanceof MutexAcquisitionFailure) {
-        mutexFailures.incrementAndGet();
-      } else if (e instanceof BrokenSnapshotFailure) {
-        snapshotFailures.incrementAndGet();
-      } else if (e instanceof AntidependencyFailure) {
-        antidependencyFailures.incrementAndGet();
-      } else {
-        throw new UnsupportedOperationException("Unsupported concurrent mode failure type " + e.getClass().getName());
-      }
     }
   }
 
   private enum Opcode {
     SNAPSHOT_READ {
       @Override
-      void operate(State state, SplittableRandom rnd, RunOptions options) {
-        final var firstAccountId = (int) (rnd.nextDouble() * options.numAccounts);
+      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
+        final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map)
-            .onFailure(state::classifyFailure)
+            .onFailure(failures::increment)
             .transact(ctx -> {
               for (var i = 0; i < options.scanAccounts; i++) {
                 final var accountId = i + firstAccountId;
@@ -101,10 +85,10 @@ public final class Harness {
 
     READ_ONLY {
       @Override
-      void operate(State state, SplittableRandom rnd, RunOptions options) {
-        final var firstAccountId = (int) (rnd.nextDouble() * options.numAccounts);
+      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
+        final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map)
-            .onFailure(state::classifyFailure)
+            .onFailure(failures::increment)
             .transact(ctx -> {
               for (var i = 0; i < options.scanAccounts; i++) {
                 final var accountId = i + firstAccountId;
@@ -118,13 +102,13 @@ public final class Harness {
 
     XFER {
       @Override
-      void operate(State state, SplittableRandom rnd, RunOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
         Enclose.over(state.map)
-            .onFailure(state::classifyFailure)
+            .onFailure(failures::increment)
             .transact(ctx -> {
-              final var fromAccountId = (int) (rnd.nextDouble() * options.numAccounts);
-              final var toAccountId = (int) (rnd.nextDouble() * options.numAccounts);
-              final var amount = 1 + (int) (rnd.nextDouble() * (options.maxXferAmount - 1));
+              final var fromAccountId = (int) (rng.nextDouble() * options.numAccounts);
+              final var toAccountId = (int) (rng.nextDouble() * options.numAccounts);
+              final var amount = 1 + (int) (rng.nextDouble() * (options.maxXferAmount - 1));
               if (toAccountId == fromAccountId) {
                 return Action.ROLLBACK_AND_RESET;
               }
@@ -156,12 +140,12 @@ public final class Harness {
 
     SPLIT_MERGE {
       @Override
-      void operate(State state, SplittableRandom rnd, RunOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
         Enclose.over(state.map)
-            .onFailure(state::classifyFailure)
+            .onFailure(failures::increment)
             .transact(ctx -> {
-              final var accountAId = (int) (rnd.nextDouble() * options.numAccounts);
-              final var accountBId = (int) (rnd.nextDouble() * options.numAccounts);
+              final var accountAId = (int) (rng.nextDouble() * options.numAccounts);
+              final var accountBId = (int) (rng.nextDouble() * options.numAccounts);
               if (accountAId == accountBId) {
                 return Action.ROLLBACK_AND_RESET;
               }
@@ -173,7 +157,7 @@ public final class Harness {
                 if (accountB.getBalance() == 0) {
                   return Action.ROLLBACK_AND_RESET;
                 }
-                final var xferAmount = 1 + (int) (rnd.nextDouble() * (accountB.getBalance() - 1));
+                final var xferAmount = 1 + (int) (rng.nextDouble() * (accountB.getBalance() - 1));
                 final var newAccountA = new Account(accountAId, xferAmount);
                 ctx.write(accountAId, newAccountA);
                 accountB.setBalance(accountB.getBalance() - xferAmount);
@@ -182,12 +166,12 @@ public final class Harness {
                 if (accountA.getBalance() == 0) {
                   return Action.ROLLBACK_AND_RESET;
                 }
-                final var xferAmount = 1 + (int) (rnd.nextDouble() * (accountA.getBalance() - 1));
+                final var xferAmount = 1 + (int) (rng.nextDouble() * (accountA.getBalance() - 1));
                 final var newAccountB = new Account(accountBId, xferAmount);
                 ctx.write(accountBId, newAccountB);
                 accountA.setBalance(accountA.getBalance() - xferAmount);
                 ctx.write(accountAId, accountA);
-              } else if (rnd.nextDouble() > 0.5){
+              } else if (rng.nextDouble() > 0.5){
                 accountA.setBalance(accountA.getBalance() + accountB.getBalance());
                 ctx.write(accountAId, accountA);
                 ctx.write(accountBId, null);
@@ -201,7 +185,7 @@ public final class Harness {
       }
     };
 
-    abstract void operate(State state, SplittableRandom rnd, RunOptions options);
+    abstract void operate(State state, Failures failures, SplittableRandom rng, RunOptions options);
 
     private static void think(long time) {
       if (time > 0) {
@@ -220,7 +204,7 @@ public final class Harness {
     final var warmupProfile = new double[]{0.33, 0.33, 0.34};
     runOne(mapFactory, RUN_OPTIONS, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION));
 
-    final var results = new RunResult[PROFILES.length];
+    final var results = new Result[PROFILES.length];
     for (var i = 0; i < PROFILES.length; i++) {
       System.out.format("- Benchmarking profile %d of %d...\n", i + 1, PROFILES.length);
       final var result = runOne(mapFactory, RUN_OPTIONS, PROFILES[i], MIN_DURATION_MS);
@@ -231,26 +215,29 @@ public final class Harness {
 
     System.out.println();
     System.out.format("- Summary:\n");
-    dumpdispatchers(Opcode.values(), PROFILES);
+    dumpProfiles(Opcode.values(), PROFILES);
     System.out.println();
-    dumpSummaries(results, PROFILES);
+    dumpSummaries(results);
   }
 
-  private static class RunResult {
+  private static class Result {
     final long elapsedMs;
     final Dispatcher dispatcher;
     final State state;
+    final Failures failures;
 
-    RunResult(long elapsedMs, Dispatcher dispatcher, State state) {
+    Result(long elapsedMs, Dispatcher dispatcher, State state, Failures failures) {
       this.elapsedMs = elapsedMs;
       this.dispatcher = dispatcher;
       this.state = state;
+      this.failures = failures;
     }
   }
 
-  private static RunResult runOne(Supplier<TransMap<Integer, Account>> mapFactory, RunOptions options, double[] profile, long minDurationMs) throws InterruptedException {
+  private static Result runOne(Supplier<TransMap<Integer, Account>> mapFactory, RunOptions options, double[] profile, long minDurationMs) throws InterruptedException {
     final var map = mapFactory.get();
     final var state = new State(map);
+    final var failures = new Failures();
 
     // initialise bank accounts
     for (var i = 0; i < options.numAccounts; i++) {
@@ -268,11 +255,11 @@ public final class Harness {
     final var startTime = System.currentTimeMillis();
     for (var i = 0; i < options.numThreads; i++) {
       new Thread(() -> {
-        final var rnd = new SplittableRandom();
+        final var rng = new SplittableRandom();
         var opsPerThread = INIT_OPS_PER_THREAD;
         var op = 0;
         while (true) {
-          dispatcher.eval(rnd.nextDouble(), ordinal -> Opcode.values()[ordinal].operate(state, rnd, options));
+          dispatcher.eval(rng.nextDouble(), ordinal -> Opcode.values()[ordinal].operate(state, failures, rng, options));
           if (++op == opsPerThread) {
             final var took = System.currentTimeMillis() - startTime;
             if (took < minDurationMs) {
@@ -292,10 +279,10 @@ public final class Harness {
     if (options.log) dumpMap(state.map);
     checkMapSum(state.map, options);
 
-    return new RunResult(took, dispatcher, state);
+    return new Result(took, dispatcher, state, failures);
   }
 
-  private static void dumpDetail(RunResult result, double[] profile) {
+  private static void dumpDetail(Result result, double[] profile) {
     final int[] padding = {15, 10, 15, 15, 15};
     System.out.format(layout(padding), "operation", "p(op)", "ops", "rate (op/s)", "ns/op");
     System.out.format(layout(padding), fill(padding, '-'));
@@ -320,7 +307,7 @@ public final class Harness {
                       String.format("%,.0f", result.elapsedMs * 1_000_000f / totalOps));
   }
 
-  private static void dumpdispatchers(Opcode[] opcodes, double[][] profiles) {
+  private static void dumpProfiles(Opcode[] opcodes, double[][] profiles) {
     final var padding = new int[profiles.length + 1];
     padding[0] = 25;
     for (var i = 1; i < padding.length; i++) {
@@ -340,24 +327,23 @@ public final class Harness {
     }
   }
 
-  private static void dumpSummaries(RunResult[] results, double[][] profiles) {
+  private static void dumpSummaries(Result[] results) {
     final int[] padding = {25, 15, 15, 15, 13, 15, 15, 10, 10};
     System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "efficiency", "refs");
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];
-      final var profile = profiles[i];
       final var counters = result.dispatcher.getStopwatches();
       final var totalOps = Arrays.stream(counters).mapToLong(Stopwatch::getNumSamples).sum();
-      final var totalFailures = result.state.mutexFailures.get() + result.state.snapshotFailures.get() + result.state.antidependencyFailures.get();
+      final var totalFailures = result.failures.mutex.get() + result.failures.snapshot.get() + result.failures.antidependency.get();
       System.out.format(layout(padding),
-                        String.valueOf(i + 1),
+                        i + 1,
                         String.format("%,.3f", result.elapsedMs / 1000f),
                         String.format("%,d", totalOps),
                         String.format("%,.0f", 1000f * totalOps / result.elapsedMs),
-                        String.format("%,d", result.state.mutexFailures.get()),
-                        String.format("%,d", result.state.snapshotFailures.get()),
-                        String.format("%,d", result.state.antidependencyFailures.get()),
+                        String.format("%,d", result.failures.mutex.get()),
+                        String.format("%,d", result.failures.snapshot.get()),
+                        String.format("%,d", result.failures.antidependency.get()),
                         String.format("%,.3f", (double) totalOps / (totalOps + totalFailures)),
                         String.format("%,d", result.state.map.debug().numRefs()));
     }
