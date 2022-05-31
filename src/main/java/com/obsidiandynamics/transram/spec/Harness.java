@@ -25,16 +25,27 @@ public final class Harness {
     return System.getenv().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase(key)).map(Entry::getValue).findAny();
   }
 
+  private static double[] divideUnitProbs(int entries) {
+    final var probs = new double[entries];
+    var remaining = 1d;
+    for (var i = entries - 1; i >= 0; i--) {
+      probs[i] = remaining / (i + 1);
+      remaining -= probs[i];
+    }
+    return probs;
+  }
+
   public static <S, K, V extends DeepCloneable<V>> void run(MapFactory mapFactory, Spec<S, K, V> spec) throws InterruptedException {
     final var executor = Executors.newFixedThreadPool(THREADS);
     try {
       final var warmupMap = mapFactory.<K, V>instantiate();
       System.out.format("Running benchmarks for %s...\n", warmupMap.getClass().getSimpleName());
       System.out.format("- Warmup...\n");
-      final var warmupProfile = new double[]{0.33, 0.33, 0.34};
+      final var operationNames = spec.getOperationNames();
+      final var warmupProfile = divideUnitProbs(operationNames.length);
+
       runOne(warmupMap, spec, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION), executor);
 
-      final var operationNames = spec.getOperationNames();
       final var profiles = spec.getProfiles();
       final var results = new Result[profiles.length];
       for (var i = 0; i < profiles.length; i++) {
