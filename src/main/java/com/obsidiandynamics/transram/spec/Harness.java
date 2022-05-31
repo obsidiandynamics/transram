@@ -76,32 +76,6 @@ public final class Harness {
       dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng));
     });
 
-//    final var latch = new CountDownLatch(THREADS);
-//    final var startTime = System.currentTimeMillis();
-//    for (var i = 0; i < THREADS; i++) {
-//      new Thread(() -> {
-//        final var rng = new SplittableRandom();
-//        var opsPerThread = INIT_OPS_PER_THREAD;
-//        var op = 0;
-//        while (true) {
-//          dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng));
-//          if (++op == opsPerThread) {
-//            final var took = System.currentTimeMillis() - startTime;
-//            if (took < minDurationMs) {
-//              final var targetOpsPerThread = (long) ((double) opsPerThread * minDurationMs / took);
-//              opsPerThread += Math.max(1, (targetOpsPerThread - opsPerThread) / 2);
-//            } else {
-//              break;
-//            }
-//          }
-//        }
-//        latch.countDown();
-//      }, "xfer_thread_" + i).start();
-//    }
-//
-//    latch.await();
-//    final var took = System.currentTimeMillis() - startTime;
-
     spec.validateState(state);
 
     return new Result(took, dispatcher, map, failures);
