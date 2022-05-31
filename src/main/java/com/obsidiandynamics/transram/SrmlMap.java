@@ -1,6 +1,7 @@
 package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.mutex.*;
+import com.obsidiandynamics.transram.spec.*;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -12,6 +13,15 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
     public int mutexStripes = 1024;
     public Supplier<UpgradeableMutex> mutexFactory = UnfairUpgradeableMutex::new;
     public int queueDepth = 4;
+  }
+
+  public static MapFactory factory(Options options) {
+    return new MapFactory() {
+      @Override
+      public <K, V extends DeepCloneable<V>> TransMap<K, V> instantiate() {
+        return new SrmlMap<>(options);
+      }
+    };
   }
 
   private final int queueDepth;

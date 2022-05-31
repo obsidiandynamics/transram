@@ -2,6 +2,7 @@ package com.obsidiandynamics.transram.run;
 
 import com.obsidiandynamics.transram.*;
 import com.obsidiandynamics.transram.Enclose.Region.*;
+import com.obsidiandynamics.transram.spec.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
@@ -13,32 +14,12 @@ import java.util.stream.*;
 import static com.obsidiandynamics.transram.util.Table.*;
 
 public final class Harness {
-  private static class RunOptions {
-    int thinkTimeMs = -1;
-    int numAccounts;
-    int initialBalance;
-    int maxXferAmount;
-    int scanAccounts;
-    int numThreads;
-    boolean log = false;
-
-    void validate() {
-      Assert.that(thinkTimeMs >= 0);
-      Assert.that(numAccounts > 0);
-      Assert.that(initialBalance > 0);
-      Assert.that(maxXferAmount > 0);
-      Assert.that(scanAccounts > 0);
-      Assert.that(numThreads > 0);
-    }
-  }
-
-  private static final RunOptions RUN_OPTIONS = new RunOptions() {{
+  private static final BankSpec.BankOptions RUN_OPTIONS = new BankSpec.BankOptions() {{
     thinkTimeMs = 0;
     numAccounts = 1_000;
     initialBalance = 100;
     maxXferAmount = 100;
     scanAccounts = 100;
-    numThreads = 16;
   }};
 
   private static final Double SCALE = Double.parseDouble(System.getenv().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase("SCALE")).map(Entry::getValue).findAny().orElse("1"));
@@ -60,6 +41,8 @@ public final class Harness {
 
   private static final int INIT_OPS_PER_THREAD = 1_000;
 
+  private static final int THREADS = 16;
+
   private static class State {
     final TransMap<Integer, Account> map;
 
@@ -71,7 +54,7 @@ public final class Harness {
   private enum Opcode {
     SNAPSHOT_READ {
       @Override
-      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, BankSpec.BankOptions options) {
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map)
             .onFailure(failures::increment)
@@ -88,7 +71,7 @@ public final class Harness {
 
     READ_ONLY {
       @Override
-      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, BankSpec.BankOptions options) {
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map)
             .onFailure(failures::increment)
@@ -105,7 +88,7 @@ public final class Harness {
 
     XFER {
       @Override
-      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, BankSpec.BankOptions options) {
         Enclose.over(state.map)
             .onFailure(failures::increment)
             .transact(ctx -> {
@@ -144,7 +127,7 @@ public final class Harness {
 
     SPLIT_MERGE {
       @Override
-      void operate(State state, Failures failures, SplittableRandom rng, RunOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, BankSpec.BankOptions options) {
         Enclose.over(state.map)
             .onFailure(failures::increment)
             .transact(ctx -> {
@@ -189,7 +172,7 @@ public final class Harness {
       }
     };
 
-    abstract void operate(State state, Failures failures, SplittableRandom rng, RunOptions options);
+    abstract void operate(State state, Failures failures, SplittableRandom rng, BankSpec.BankOptions options);
 
     private static void think(long time) {
       if (time > 0) {
@@ -238,7 +221,7 @@ public final class Harness {
     }
   }
 
-  private static Result runOne(Supplier<TransMap<Integer, Account>> mapFactory, RunOptions options, double[] profile, long minDurationMs) throws InterruptedException {
+  private static Result runOne(Supplier<TransMap<Integer, Account>> mapFactory, BankSpec.BankOptions options, double[] profile, long minDurationMs) throws InterruptedException {
     final var map = mapFactory.get();
     final var state = new State(map);
     final var failures = new Failures();
@@ -255,9 +238,9 @@ public final class Harness {
     }
 
     final var dispatcher = new Dispatcher(profile);
-    final var latch = new CountDownLatch(options.numThreads);
+    final var latch = new CountDownLatch(THREADS);
     final var startTime = System.currentTimeMillis();
-    for (var i = 0; i < options.numThreads; i++) {
+    for (var i = 0; i < THREADS; i++) {
       new Thread(() -> {
         final var rng = new SplittableRandom();
         var opsPerThread = INIT_OPS_PER_THREAD;
@@ -359,7 +342,7 @@ public final class Harness {
     }
   }
 
-  private static void checkMapSum(TransMap<?, Account> map, RunOptions options) {
+  private static void checkMapSum(TransMap<?, Account> map, BankSpec.BankOptions options) {
     final var values = map.debug().dirtyView().values();
     final var sum = values.stream().filter(Versioned::hasValue).map(Versioned::getValue).mapToLong(Account::getBalance).sum();
     final var expectedSum = options.numAccounts * options.initialBalance;
