@@ -19,7 +19,7 @@ public final class Harness {
 
   private static final int INIT_OPS_PER_THREAD = 1_000;
 
-  private static final int THREADS = 16;
+  private static final int THREADS = Integer.parseInt(getEnvIgnoreCase("threads").orElse("16"));
 
   private static Optional<String> getEnvIgnoreCase(String key) {
     return System.getenv().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase(key)).map(Entry::getValue).findAny();
@@ -78,6 +78,11 @@ public final class Harness {
       this.dispatcher = dispatcher;
       this.map = map;
       this.failures = failures;
+    }
+
+    double getRate() {
+      final var totalOps = Arrays.stream(dispatcher.getStopwatches()).mapToLong(Stopwatch::getNumSamples).sum();
+      return 1000d * totalOps / elapsedMs;
     }
   }
 
@@ -147,19 +152,22 @@ public final class Harness {
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];
-      final var counters = result.dispatcher.getStopwatches();
-      final var totalOps = Arrays.stream(counters).mapToLong(Stopwatch::getNumSamples).sum();
+      final var stopwatches = result.dispatcher.getStopwatches();
+      final var totalOps = Arrays.stream(stopwatches).mapToLong(Stopwatch::getNumSamples).sum();
       final var totalFailures = result.failures.mutex.get() + result.failures.snapshot.get() + result.failures.antidependency.get();
       System.out.format(layout(padding),
                         i + 1,
                         String.format("%,.3f", result.elapsedMs / 1000f),
                         String.format("%,d", totalOps),
-                        String.format("%,.0f", 1000f * totalOps / result.elapsedMs),
+                        String.format("%,.0f", 1000d * totalOps / result.elapsedMs),
                         String.format("%,d", result.failures.mutex.get()),
                         String.format("%,d", result.failures.snapshot.get()),
                         String.format("%,d", result.failures.antidependency.get()),
                         String.format("%,.3f", (double) totalOps / (totalOps + totalFailures)),
                         String.format("%,d", result.map.debug().numRefs()));
     }
+
+    final double blend = Arrays.stream(results).map(Result::getRate).collect(Collectors.summarizingDouble(Math::log10)).getAverage();
+    System.out.format("Blended log-rate: %,.3f\n", blend);
   }
 }
