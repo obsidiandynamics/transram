@@ -5,6 +5,7 @@ import com.obsidiandynamics.transram.Enclose.Region.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
+import java.util.Map.*;
 import java.util.concurrent.*;
 import java.util.function.*;
 import java.util.stream.*;
@@ -40,7 +41,9 @@ public final class Harness {
     numThreads = 16;
   }};
 
-  private static final long MIN_DURATION_MS = 5_00;
+  private static final Double SCALE = Double.parseDouble(System.getenv().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase("SCALE")).map(Entry::getValue).findAny().orElse("1"));
+
+  private static final long MIN_DURATION_MS = (long) (1_000 * SCALE);
 
   private static final double WARMUP_FRACTION = 0.1;
 
@@ -112,7 +115,8 @@ public final class Harness {
               if (toAccountId == fromAccountId) {
                 return Action.ROLLBACK_AND_RESET;
               }
-              if (options.log) System.out.format("%s, fromAccountId=%d, toAccountId=%d, amount=%d\n", Thread.currentThread().getName(), fromAccountId, toAccountId, amount);
+              if (options.log)
+                System.out.format("%s, fromAccountId=%d, toAccountId=%d, amount=%d\n", Thread.currentThread().getName(), fromAccountId, toAccountId, amount);
               final var fromAccount = ctx.read(fromAccountId);
               if (fromAccount == null) {
                 return Action.ROLLBACK_AND_RESET;
@@ -171,7 +175,7 @@ public final class Harness {
                 ctx.write(accountBId, newAccountB);
                 accountA.setBalance(accountA.getBalance() - xferAmount);
                 ctx.write(accountAId, accountA);
-              } else if (rng.nextDouble() > 0.5){
+              } else if (rng.nextDouble() > 0.5) {
                 accountA.setBalance(accountA.getBalance() + accountB.getBalance());
                 ctx.write(accountAId, accountA);
                 ctx.write(accountBId, null);
@@ -199,7 +203,7 @@ public final class Harness {
   }
 
   public static void run(Supplier<TransMap<Integer, Account>> mapFactory) throws InterruptedException {
-    System.out.format("Running benchmarks for %s...\n",  mapFactory.get().getClass().getSimpleName());
+    System.out.format("Running benchmarks for %s...\n", mapFactory.get().getClass().getSimpleName());
     System.out.format("- Warmup...\n");
     final var warmupProfile = new double[]{0.33, 0.33, 0.34};
     runOne(mapFactory, RUN_OPTIONS, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION));
