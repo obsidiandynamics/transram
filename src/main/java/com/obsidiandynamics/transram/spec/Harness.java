@@ -13,7 +13,7 @@ import static com.obsidiandynamics.transram.util.Table.*;
 public final class Harness {
   private static final Double SCALE = Double.parseDouble(System.getenv().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase("SCALE")).map(Entry::getValue).findAny().orElse("1"));
 
-  private static final long MIN_DURATION_MS = (long) (5_000 * SCALE);
+  private static final long MIN_DURATION_MS = (long) (1_000 * SCALE);
 
   private static final double WARMUP_FRACTION = 0.1;
 
