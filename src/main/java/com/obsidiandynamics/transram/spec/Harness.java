@@ -11,7 +11,7 @@ import java.util.stream.*;
 import static com.obsidiandynamics.transram.util.Table.*;
 
 public final class Harness {
-  private static final Double SCALE = Double.parseDouble(System.getenv().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase("SCALE")).map(Entry::getValue).findAny().orElse("1"));
+  private static final Double SCALE = Double.parseDouble(getEnvIgnoreCase("scale").orElse("1"));
 
   private static final long MIN_DURATION_MS = (long) (1_000 * SCALE);
 
@@ -21,12 +21,17 @@ public final class Harness {
 
   private static final int THREADS = 16;
 
+  private static Optional<String> getEnvIgnoreCase(String key) {
+    return System.getenv().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase(key)).map(Entry::getValue).findAny();
+  }
+
   public static <S, K, V extends DeepCloneable<V>> void run(MapFactory mapFactory, Spec<S, K, V> spec) throws InterruptedException {
+    final var executor = Executors.newFixedThreadPool(THREADS);
     final var warmupMap = mapFactory.<K, V>instantiate();
     System.out.format("Running benchmarks for %s...\n", warmupMap.getClass().getSimpleName());
     System.out.format("- Warmup...\n");
     final var warmupProfile = new double[]{0.33, 0.33, 0.34};
-    runOne(warmupMap, spec, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION));
+    runOne(warmupMap, spec, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION), executor);
 
     final var operationNames = spec.getOperationNames();
     final var profiles = spec.getProfiles();
@@ -34,11 +39,12 @@ public final class Harness {
     for (var i = 0; i < profiles.length; i++) {
       System.out.format("- Benchmarking profile %d of %d...\n", i + 1, profiles.length);
       final var runMap = mapFactory.<K, V>instantiate();
-      final var result = runOne(runMap, spec, profiles[i], MIN_DURATION_MS);
+      final var result = runOne(runMap, spec, profiles[i], MIN_DURATION_MS, executor);
       dumpDetail(operationNames, result, profiles[i]);
       System.out.println();
       results[i] = result;
     }
+    executor.shutdown();
 
     System.out.println();
     System.out.format("- Summary:\n");
@@ -61,36 +67,40 @@ public final class Harness {
     }
   }
 
-  private static <S, K, V extends DeepCloneable<V>> Result runOne(TransMap<K, V> map, Spec<S, K, V> spec, double[] profile, long minDurationMs) throws InterruptedException {
+  private static <S, K, V extends DeepCloneable<V>> Result runOne(TransMap<K, V> map, Spec<S, K, V> spec, double[] profile, long minDurationMs, Executor executor) throws InterruptedException {
     final var state = spec.instantiateState(map);
     final var failures = new Failures();
 
     final var dispatcher = new Dispatcher(profile);
-    final var latch = new CountDownLatch(THREADS);
-    final var startTime = System.currentTimeMillis();
-    for (var i = 0; i < THREADS; i++) {
-      new Thread(() -> {
-        final var rng = new SplittableRandom();
-        var opsPerThread = INIT_OPS_PER_THREAD;
-        var op = 0;
-        while (true) {
-          dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng));
-          if (++op == opsPerThread) {
-            final var took = System.currentTimeMillis() - startTime;
-            if (took < minDurationMs) {
-              final var targetOpsPerThread = (long) ((double) opsPerThread * minDurationMs / took);
-              opsPerThread += Math.max(1, (targetOpsPerThread - opsPerThread) / 2);
-            } else {
-              break;
-            }
-          }
-        }
-        latch.countDown();
-      }, "xfer_thread_" + i).start();
-    }
+    final var took = TimedRunner.<SplittableRandom>run(THREADS, INIT_OPS_PER_THREAD, minDurationMs, executor, SplittableRandom::new, rng -> {
+      dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng));
+    });
 
-    latch.await();
-    final var took = System.currentTimeMillis() - startTime;
+//    final var latch = new CountDownLatch(THREADS);
+//    final var startTime = System.currentTimeMillis();
+//    for (var i = 0; i < THREADS; i++) {
+//      new Thread(() -> {
+//        final var rng = new SplittableRandom();
+//        var opsPerThread = INIT_OPS_PER_THREAD;
+//        var op = 0;
+//        while (true) {
+//          dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng));
+//          if (++op == opsPerThread) {
+//            final var took = System.currentTimeMillis() - startTime;
+//            if (took < minDurationMs) {
+//              final var targetOpsPerThread = (long) ((double) opsPerThread * minDurationMs / took);
+//              opsPerThread += Math.max(1, (targetOpsPerThread - opsPerThread) / 2);
+//            } else {
+//              break;
+//            }
+//          }
+//        }
+//        latch.countDown();
+//      }, "xfer_thread_" + i).start();
+//    }
+//
+//    latch.await();
+//    final var took = System.currentTimeMillis() - startTime;
 
     spec.validateState(state);
 
