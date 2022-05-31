@@ -2,7 +2,6 @@ package com.obsidiandynamics.transram.spec;
 
 import com.obsidiandynamics.transram.*;
 import com.obsidiandynamics.transram.Enclose.Region.*;
-import com.obsidiandynamics.transram.run.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;

@@ -1,26 +1,26 @@
-package com.obsidiandynamics.transram.run;
+package com.obsidiandynamics.transram.spec;
 
 import com.obsidiandynamics.transram.*;
 
-public final class Account implements DeepCloneable<Account> {
+final class Account implements DeepCloneable<Account> {
   private final int id;
 
   private int balance;
 
-  public Account(int id, int balance) {
+  Account(int id, int balance) {
     this.id = id;
     this.balance = balance;
   }
 
-  public int getId() {
+  int getId() {
     return id;
   }
 
-  public int getBalance() {
+  int getBalance() {
     return balance;
   }
 
-  public void setBalance(int balance) {
+  void setBalance(int balance) {
     this.balance = balance;
   }
 
