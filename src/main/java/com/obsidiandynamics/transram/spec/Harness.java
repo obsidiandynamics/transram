@@ -27,30 +27,33 @@ public final class Harness {
 
   public static <S, K, V extends DeepCloneable<V>> void run(MapFactory mapFactory, Spec<S, K, V> spec) throws InterruptedException {
     final var executor = Executors.newFixedThreadPool(THREADS);
-    final var warmupMap = mapFactory.<K, V>instantiate();
-    System.out.format("Running benchmarks for %s...\n", warmupMap.getClass().getSimpleName());
-    System.out.format("- Warmup...\n");
-    final var warmupProfile = new double[]{0.33, 0.33, 0.34};
-    runOne(warmupMap, spec, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION), executor);
+    try {
+      final var warmupMap = mapFactory.<K, V>instantiate();
+      System.out.format("Running benchmarks for %s...\n", warmupMap.getClass().getSimpleName());
+      System.out.format("- Warmup...\n");
+      final var warmupProfile = new double[]{0.33, 0.33, 0.34};
+      runOne(warmupMap, spec, warmupProfile, (long) (MIN_DURATION_MS * WARMUP_FRACTION), executor);
 
-    final var operationNames = spec.getOperationNames();
-    final var profiles = spec.getProfiles();
-    final var results = new Result[profiles.length];
-    for (var i = 0; i < profiles.length; i++) {
-      System.out.format("- Benchmarking profile %d of %d...\n", i + 1, profiles.length);
-      final var runMap = mapFactory.<K, V>instantiate();
-      final var result = runOne(runMap, spec, profiles[i], MIN_DURATION_MS, executor);
-      dumpDetail(operationNames, result, profiles[i]);
+      final var operationNames = spec.getOperationNames();
+      final var profiles = spec.getProfiles();
+      final var results = new Result[profiles.length];
+      for (var i = 0; i < profiles.length; i++) {
+        System.out.format("- Benchmarking profile %d of %d...\n", i + 1, profiles.length);
+        final var runMap = mapFactory.<K, V>instantiate();
+        final var result = runOne(runMap, spec, profiles[i], MIN_DURATION_MS, executor);
+        dumpDetail(operationNames, result, profiles[i]);
+        System.out.println();
+        results[i] = result;
+      }
+
       System.out.println();
-      results[i] = result;
+      System.out.format("- Summary:\n");
+      dumpProfiles(operationNames, profiles);
+      System.out.println();
+      dumpSummaries(results);
+    } finally {
+      executor.shutdown();
     }
-    executor.shutdown();
-
-    System.out.println();
-    System.out.format("- Summary:\n");
-    dumpProfiles(operationNames, profiles);
-    System.out.println();
-    dumpSummaries(results);
   }
 
   private static class Result {
@@ -82,7 +85,7 @@ public final class Harness {
   }
 
   private static void dumpDetail(String[] operationNames, Result result, double[] profile) {
-    final int[] padding = {15, 10, 15, 15, 15};
+    final var padding = new int[] {15, 10, 15, 15, 15};
     System.out.format(layout(padding), "operation", "p(op)", "ops", "rate (op/s)", "ns/op");
     System.out.format(layout(padding), fill(padding, '-'));
     final var stopwatches = result.dispatcher.getStopwatches();
@@ -128,7 +131,7 @@ public final class Harness {
   }
 
   private static void dumpSummaries(Result[] results) {
-    final int[] padding = {25, 15, 15, 15, 13, 15, 15, 10, 10};
+    final var padding = new int[] {25, 15, 15, 15, 13, 15, 15, 10, 10};
     System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "efficiency", "refs");
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {

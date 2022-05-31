@@ -33,7 +33,11 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
   }
 
   private static final BankOptions DEF_OPTIONS = new BankOptions() {{
-    thinkTimeMs = 0; numAccounts = 1_000; initialBalance = 100; maxXferAmount = 100; scanAccounts = 100;
+    thinkTimeMs = 0;
+    numAccounts = 1_000;
+    initialBalance = 100;
+    maxXferAmount = 100;
+    scanAccounts = 100;
   }};
 
   private static final double[][] DEF_PROFILES = {
@@ -56,7 +60,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
 
   @Override
   public String[] getOperationNames() {
-    return Arrays.stream(Opcode.values()).map(Opcode::name).toArray(String[]::new);
+    return Arrays.stream(Operation.values()).map(Operation::name).toArray(String[]::new);
   }
 
   @Override
@@ -71,20 +75,25 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
       final var accountId = i; Enclose.over(map).transact(ctx -> {
         final var existingAccount = ctx.read(accountId);
         Assert.that(existingAccount == null, () -> String.format("Found existing account %d (%s)", accountId, existingAccount));
-        ctx.write(accountId, new Account(accountId, options.initialBalance)); return Action.COMMIT;
+        ctx.write(accountId, new Account(accountId, options.initialBalance));
+        return Action.COMMIT;
       });
-    } return new BankState(map);
+    }
+    return new BankState(map);
   }
 
-  private enum Opcode {
+  private enum Operation {
     SNAPSHOT_READ {
       @Override
       void operate(BankState state, Failures failures, SplittableRandom rng, BankOptions options) {
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
           for (var i = 0; i < options.scanAccounts; i++) {
-            final var accountId = i + firstAccountId; ctx.read(accountId % options.numAccounts);
-          } think(options.thinkTimeMs); return Action.ROLLBACK;
+            final var accountId = i + firstAccountId;
+            ctx.read(accountId % options.numAccounts);
+          }
+          think(options.thinkTimeMs);
+          return Action.ROLLBACK;
         });
       }
     },
@@ -95,8 +104,11 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
           for (var i = 0; i < options.scanAccounts; i++) {
-            final var accountId = i + firstAccountId; ctx.read(accountId % options.numAccounts);
-          } think(options.thinkTimeMs); return Action.COMMIT;
+            final var accountId = i + firstAccountId;
+            ctx.read(accountId % options.numAccounts);
+          }
+          think(options.thinkTimeMs);
+          return Action.COMMIT;
         });
       }
     },
@@ -110,21 +122,31 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
           final var amount = 1 + (int) (rng.nextDouble() * (options.maxXferAmount - 1));
           if (toAccountId == fromAccountId) {
             return Action.ROLLBACK_AND_RESET;
-          } if (options.log)
+          }
+
+          if (options.log) {
             System.out.format("%s, fromAccountId=%d, toAccountId=%d, amount=%d\n", Thread.currentThread().getName(), fromAccountId, toAccountId, amount);
-          final var fromAccount = ctx.read(fromAccountId); if (fromAccount == null) {
+          }
+
+          final var fromAccount = ctx.read(fromAccountId);
+          if (fromAccount == null) {
             return Action.ROLLBACK_AND_RESET;
-          } final var toAccount = ctx.read(toAccountId); if (toAccount == null) {
+          }
+          final var toAccount = ctx.read(toAccountId);
+          if (toAccount == null) {
             return Action.ROLLBACK_AND_RESET;
           }
 
-          final var newFromBalance = fromAccount.getBalance() - amount; if (newFromBalance < 0) {
+          final var newFromBalance = fromAccount.getBalance() - amount;
+          if (newFromBalance < 0) {
             return Action.ROLLBACK_AND_RESET;
           }
 
-          fromAccount.setBalance(newFromBalance); toAccount.setBalance(toAccount.getBalance() + amount);
-
-          ctx.write(fromAccountId, fromAccount); ctx.write(toAccountId, toAccount); think(options.thinkTimeMs);
+          fromAccount.setBalance(newFromBalance);
+          toAccount.setBalance(toAccount.getBalance() + amount);
+          ctx.write(fromAccountId, fromAccount);
+          ctx.write(toAccountId, toAccount);
+          think(options.thinkTimeMs);
           return Action.COMMIT;
         });
       }
@@ -135,30 +157,42 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
       void operate(BankState state, Failures failures, SplittableRandom rng, BankOptions options) {
         Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
           final var accountAId = (int) (rng.nextDouble() * options.numAccounts);
-          final var accountBId = (int) (rng.nextDouble() * options.numAccounts); if (accountAId == accountBId) {
+          final var accountBId = (int) (rng.nextDouble() * options.numAccounts);
+          if (accountAId == accountBId) {
             return Action.ROLLBACK_AND_RESET;
-          } final var accountA = ctx.read(accountAId); final var accountB = ctx.read(accountBId);
+          }
+          final var accountA = ctx.read(accountAId);
+          final var accountB = ctx.read(accountBId);
           if (accountA == null && accountB == null) {
             return Action.ROLLBACK_AND_RESET;
           } else if (accountA == null) {
             if (accountB.getBalance() == 0) {
               return Action.ROLLBACK_AND_RESET;
-            } final var xferAmount = 1 + (int) (rng.nextDouble() * (accountB.getBalance() - 1));
-            final var newAccountA = new Account(accountAId, xferAmount); ctx.write(accountAId, newAccountA);
-            accountB.setBalance(accountB.getBalance() - xferAmount); ctx.write(accountBId, accountB);
+            }
+            final var xferAmount = 1 + (int) (rng.nextDouble() * (accountB.getBalance() - 1));
+            final var newAccountA = new Account(accountAId, xferAmount);
+            ctx.write(accountAId, newAccountA);
+            accountB.setBalance(accountB.getBalance() - xferAmount);
+            ctx.write(accountBId, accountB);
           } else if (accountB == null) {
             if (accountA.getBalance() == 0) {
               return Action.ROLLBACK_AND_RESET;
-            } final var xferAmount = 1 + (int) (rng.nextDouble() * (accountA.getBalance() - 1));
-            final var newAccountB = new Account(accountBId, xferAmount); ctx.write(accountBId, newAccountB);
-            accountA.setBalance(accountA.getBalance() - xferAmount); ctx.write(accountAId, accountA);
+            }
+            final var xferAmount = 1 + (int) (rng.nextDouble() * (accountA.getBalance() - 1));
+            final var newAccountB = new Account(accountBId, xferAmount);
+            ctx.write(accountBId, newAccountB);
+            accountA.setBalance(accountA.getBalance() - xferAmount);
+            ctx.write(accountAId, accountA);
           } else if (rng.nextDouble() > 0.5) {
-            accountA.setBalance(accountA.getBalance() + accountB.getBalance()); ctx.write(accountAId, accountA);
+            accountA.setBalance(accountA.getBalance() + accountB.getBalance());
+            ctx.write(accountAId, accountA);
             ctx.write(accountBId, null);
           } else {
-            accountB.setBalance(accountA.getBalance() + accountB.getBalance()); ctx.write(accountBId, accountB);
+            accountB.setBalance(accountA.getBalance() + accountB.getBalance());
+            ctx.write(accountBId, accountB);
             ctx.write(accountAId, null);
-          } return Action.COMMIT;
+          }
+          return Action.COMMIT;
         });
       }
     };
@@ -178,7 +212,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
 
   @Override
   public void evaluate(int ordinal, BankState state, Failures failures, SplittableRandom rng) {
-    Opcode.values()[ordinal].operate(state, failures, rng, options);
+    Operation.values()[ordinal].operate(state, failures, rng, options);
   }
 
   @Override
