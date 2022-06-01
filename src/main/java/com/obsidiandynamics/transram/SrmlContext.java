@@ -10,11 +10,11 @@ import java.util.concurrent.atomic.*;
 public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
   private final SrmlMap<K, V> map;
 
-  private final Set<K> reads = new HashSet<>();
+  private final Set<Key> reads = new HashSet<>();
 
-  private final Set<K> writes = new HashSet<>();
+  private final Set<Key> writes = new HashSet<>();
 
-  private final Map<K, Versioned<V>> localValues = new HashMap<>();
+  private final Map<Key, Versioned<V>> localValues = new HashMap<>();
 
   private final long readVersion;
 
@@ -31,26 +31,27 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   @Override
   public V read(K key) throws BrokenSnapshotFailure {
     ensureOpen();
-    final var existing = localValues.get(key);
+    final var wrapperKey = WrapperKey.wrap(key);
+    final var existing = localValues.get(wrapperKey);
     if (existing != null) {
       return existing.getValue();
     }
 
     // don't enrol as a read if it already appears as a write
-    if (! writes.contains(key)) {
-      reads.add(key);
+    if (! writes.contains(wrapperKey)) {
+      reads.add(wrapperKey);
     }
 
-    final var storedValues = map.getStore().get(key);
+    final var storedValues = map.getStore().get(wrapperKey);
     if (storedValues == null) {
       final var nullValue = new Versioned<V>(readVersion, null);
-      localValues.put(key, nullValue);
+      localValues.put(wrapperKey, nullValue);
       return nullValue.getValue();
     } else {
       for (var storedValue : storedValues) {
         if (storedValue.getVersion() <= readVersion) {
           final var clonedValue = storedValue.deepClone();
-          localValues.put(key, clonedValue);
+          localValues.put(wrapperKey, clonedValue);
           return clonedValue.getValue();
         }
       }
@@ -62,8 +63,9 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   @Override
   public void write(K key, V value) {
     ensureOpen();
-    localValues.put(key, new Versioned<>(-1, value));
-    writes.add(key);
+    final var wrapperKey = WrapperKey.wrap(key);
+    localValues.put(wrapperKey, new Versioned<>(-1, value));
+    writes.add(wrapperKey);
   }
 
   @Override

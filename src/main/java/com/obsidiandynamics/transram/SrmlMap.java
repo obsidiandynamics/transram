@@ -2,11 +2,13 @@ package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.spec.*;
+import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
   public static class Options {
@@ -26,7 +28,7 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
 
   private final int queueDepth;
 
-  private final Map<K, Deque<Versioned<V>>> store = new ConcurrentHashMap<>();
+  private final Map<Key, Deque<Versioned<V>>> store = new ConcurrentHashMap<>();
 
   private final StripedMutexes<Mutex> mutexes;
 
@@ -54,18 +56,17 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
 
   Object getContextLock() { return contextLock; }
 
-  Map<K, Deque<Versioned<V>>> getStore() {
+  Map<Key, Deque<Versioned<V>>> getStore() {
     return store;
   }
 
   private final Debug<K, V> debug = new Debug<>() {
     @Override
     public Map<K, Versioned<V>> dirtyView() {
-      final var copy = new HashMap<K, Versioned<V>>(store.size());
-      for (var entry : store.entrySet()) {
-        copy.put(entry.getKey(), entry.getValue().getFirst());
-      }
-      return copy;
+      return store.entrySet().stream()
+          .filter(e -> e.getKey() instanceof  WrapperKey<?>)
+          .collect(Collectors.toUnmodifiableMap(e -> Unsafe.<K>cast(((WrapperKey<?>) e.getKey()).unwrap()),
+                                                e -> e.getValue().getFirst()));
     }
 
     @Override
