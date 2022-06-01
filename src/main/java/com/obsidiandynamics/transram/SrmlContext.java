@@ -101,7 +101,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
     final var combinedMutexes = new TreeMap<MutexRef<Mutex>, LockModeAndState>();
     for (var read : reads) {
-      final var mutex = map.getMutexes().forKey(read);
+      final var mutex = getMutex(read);
       if (writes.contains(read)) {
         combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
       } else if (! combinedMutexes.containsKey(mutex)) {
@@ -110,7 +110,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     }
 
     for (var write : writes) {
-      final var mutex = map.getMutexes().forKey(write);
+      final var mutex = getMutex(write);
       combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
     }
 
@@ -253,5 +253,23 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       throw new IllegalStateException("Transaction is not committed");
     }
     return writeVersion;
+  }
+
+  /**
+   * Obtains a mutex reference for the given {@code key} such that, for mutexes of width <i>N</i>,
+   * regular keys map to stripes 0..(<i>N</i> – 2), while internal keys map to stripe
+   * <i>N</i> – 1.
+   *
+   * @param key The key.
+   * @return The {@link MutexRef}.
+   */
+  private MutexRef<Mutex> getMutex(Key key) {
+    final var mutexes = map.getMutexes();
+    final var stripes = mutexes.stripes();
+    if (key instanceof InternalKey) {
+      return mutexes.forStripe(stripes - 1);
+    } else {
+      return mutexes.forStripe(StripedMutexes.hash(key, stripes - 1));
+    }
   }
 }

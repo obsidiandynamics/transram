@@ -59,13 +59,16 @@ public final class StripedMutexes<M extends Mutex> {
     return stripes[stripe];
   }
 
-  private int stripeForKey(Object key) {
-    final var numStripes = stripes.length;
-    return (key.hashCode() + numStripes) % numStripes;
+  public int stripes() {
+    return stripes.length;
+  }
+
+  public static int hash(Object key, int stripes) {
+    return (key.hashCode() + stripes) % stripes;
   }
 
   public MutexRef<M> forKey(Object key) {
-    return forStripe(stripeForKey(key));
+    return forStripe(hash(key, stripes.length));
   }
 
   @Override
