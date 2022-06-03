@@ -22,16 +22,18 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   private static final class Tracker {
     DeepCloneable<?> value;
     ItemState state;
+    boolean written;
 
-    Tracker(DeepCloneable<?> value, ItemState state) {
+    Tracker(DeepCloneable<?> value, ItemState state, boolean written) {
       this.value = value;
       this.state = state;
+      this.written = written;
     }
   }
 
   private final Map<Key, Tracker> local = new HashMap<>();
 
-  private final Set<Key> writes = new HashSet<>();
+//  private final Set<Key> writes = new HashSet<>();
 
   private long version;
 
@@ -41,6 +43,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     this.map = map;
     this.mutexTimeoutMs = mutexTimeoutMs;
   }
+
   @Override
   public V read(K key) throws MutexAcquisitionFailure {
     return Unsafe.cast(read(Key.wrap(key)));
@@ -74,10 +77,10 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     final RawVersioned versioned = map.getStore().get(key);
     if (versioned != null) {
       final var cloned = DeepCloneable.clone(Unsafe.cast(versioned.getValue()));
-      local.put(key, new Tracker(cloned, ItemState.EXISTING));
+      local.put(key, new Tracker(cloned, ItemState.EXISTING, false));
       return cloned;
     } else {
-      local.put(key, new Tracker(null, ItemState.DELETED));
+      local.put(key, new Tracker(null, ItemState.DELETED, false));
       return null;
     }
   }
@@ -133,7 +136,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       }
     }
 
-    writes.add(key);
+//    writes.add(key);
     local.compute(key, (__, existing) -> {
       if (existing != null) {
         switch (state) {
@@ -155,9 +158,10 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
         }
         existing.value = value;
         existing.state = state;
+        existing.written = true;
         return existing;
       } else {
-        return new Tracker(value, state);
+        return new Tracker(value, state, true);
       }
     });
   }
@@ -204,26 +208,53 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       return;
     }
 
-    for (var key : writes) {
-      final var tracker = local.get(key);
-      final var existingValue = map.getStore().get(key);
-      switch (tracker.state) {
-        case INSERTED -> {
-          if (existingValue != null) {
-            rollback();
-            throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+//    for (var key : writes) {
+//      final var tracker = local.get(key);
+//      final var existingValue = map.getStore().get(key);
+//      switch (tracker.state) {
+//        case INSERTED -> {
+//          if (existingValue != null) {
+//            rollback();
+//            throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+//          }
+//        }
+//        case EXISTING -> {
+//          if (existingValue == null) {
+//            rollback();
+//            throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+//          }
+//        }
+//        case DELETED -> {
+//          if (existingValue == null) {
+//            rollback();
+//            throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+//          }
+//        }
+//      }
+//    }
+    for (var entry : local.entrySet()) {
+      final var tracker = entry.getValue();
+      if (tracker.written) {
+        final var key = entry.getKey();
+        final var existingValue = map.getStore().get(key);
+        switch (tracker.state) {
+          case INSERTED -> {
+            if (existingValue != null) {
+              rollback();
+              throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+            }
           }
-        }
-        case EXISTING -> {
-          if (existingValue == null) {
-            rollback();
-            throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+          case EXISTING -> {
+            if (existingValue == null) {
+              rollback();
+              throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+            }
           }
-        }
-        case DELETED -> {
-          if (existingValue == null) {
-            rollback();
-            throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+          case DELETED -> {
+            if (existingValue == null) {
+              rollback();
+              throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+            }
           }
         }
       }
@@ -231,12 +262,22 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
     version = map.version().incrementAndGet();
 
-    for (var key : writes) {
-      final var tracker = local.get(key);
-      if (tracker.value != null) {
-        map.getStore().put(key, new RawVersioned(version, tracker.value));
-      } else {
-        map.getStore().remove(key);
+//    for (var key : writes) {
+//      final var tracker = local.get(key);
+//      if (tracker.value != null) {
+//        map.getStore().put(key, new RawVersioned(version, tracker.value));
+//      } else {
+//        map.getStore().remove(key);
+//      }
+//    }
+    for (var entry : local.entrySet()) {
+      final var tracker = entry.getValue();
+      if (tracker.written) {
+        if (tracker.value != null) {
+          map.getStore().put(entry.getKey(), new RawVersioned(version, tracker.value));
+        } else {
+          map.getStore().remove(entry.getKey());
+        }
       }
     }
     releaseMutexes();
