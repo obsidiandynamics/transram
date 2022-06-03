@@ -65,8 +65,8 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
     @Override
     public Map<K, GenericVersioned<V>> dirtyView() {
       return store.entrySet().stream()
-          .filter(e -> e.getKey() instanceof  WrapperKey<?>)
-          .collect(Collectors.toUnmodifiableMap(e -> Unsafe.<K>cast(((WrapperKey<?>) e.getKey()).unwrap()),
+          .filter(e -> e.getKey() instanceof KeyRef<?>)
+          .collect(Collectors.toUnmodifiableMap(e -> Unsafe.<K>cast(((KeyRef<?>) e.getKey()).unwrap()),
                                                  e -> e.getValue().getFirst().generify()));
     }
 

@@ -70,7 +70,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
   }
 
   @Override
-  public BankState instantiateState(TransMap<Integer, Account> map) {
+  public BankState instantiate(TransMap<Integer, Account> map) {
     // initialise bank accounts
     for (var i = 0; i < options.numAccounts; i++) {
       final var accountId = i;
@@ -220,7 +220,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
   }
 
   @Override
-  public void validateState(BankState state) {
+  public void verify(BankState state) {
     if (options.log) {
       dumpMap(state.map);
     }

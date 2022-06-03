@@ -9,9 +9,9 @@ public interface Spec<S, K, V extends DeepCloneable<V>> {
 
   double[][] getProfiles();
 
-  S instantiateState(TransMap<K, V> map);
+  S instantiate(TransMap<K, V> map);
 
   void evaluate(int ordinal, S state, Failures failures, SplittableRandom rng);
 
-  void validateState(S state);
+  void verify(S state);
 }

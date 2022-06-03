@@ -83,7 +83,6 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   }
 
   private void write(K key, V value) throws MutexAcquisitionFailure {
-    Assert.that(key != null, () -> "Cannot write null key");
     ensureOpen();
     final var mutex = map.getMutexes().forKey(key);
     final var addedMutex = writeMutexes.add(mutex);

@@ -1,14 +1,10 @@
 package com.obsidiandynamics.transram;
 
-public final class WrapperKey<K> implements Key {
+public final class KeyRef<K> implements Key {
   private final K key;
 
-  private WrapperKey(K key) {
+  KeyRef(K key) {
     this.key = key;
-  }
-
-  public static <K> WrapperKey<K> wrap(K key) {
-    return new WrapperKey<>(key);
   }
 
   public K unwrap() {
@@ -19,8 +15,8 @@ public final class WrapperKey<K> implements Key {
   public boolean equals(Object o) {
     if (this == o) {
       return true;
-    } else if (o instanceof  WrapperKey<?>) {
-      final var other = (WrapperKey<?>) o;
+    } else if (o instanceof KeyRef<?>) {
+      final var other = (KeyRef<?>) o;
       return key.equals(other.key);
     } else {
       return false;
@@ -34,6 +30,6 @@ public final class WrapperKey<K> implements Key {
 
   @Override
   public String toString() {
-    return WrapperKey.class.getSimpleName() + '[' + key.toString() + ']';
+    return KeyRef.class.getSimpleName() + '[' + key.toString() + ']';
   }
 }

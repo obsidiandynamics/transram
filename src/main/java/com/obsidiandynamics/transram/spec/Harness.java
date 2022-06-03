@@ -87,7 +87,7 @@ public final class Harness {
   }
 
   private static <S, K, V extends DeepCloneable<V>> Result runOne(TransMap<K, V> map, Spec<S, K, V> spec, double[] profile, long minDurationMs, Executor executor) throws InterruptedException {
-    final var state = spec.instantiateState(map);
+    final var state = spec.instantiate(map);
     final var failures = new Failures();
 
     final var dispatcher = new Dispatcher(profile);
@@ -95,7 +95,7 @@ public final class Harness {
       dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng));
     });
 
-    spec.validateState(state);
+    spec.verify(state);
 
     return new Result(took, dispatcher, map, failures);
   }
