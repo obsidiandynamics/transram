@@ -167,7 +167,7 @@ public final class Harness {
                         String.format("%,d", result.map.debug().numRefs()));
     }
 
-    final double blend = Arrays.stream(results).map(Result::getRate).collect(Collectors.summarizingDouble(Math::log10)).getAverage();
-    System.out.format("Blended log-rate: %,.3f\n", blend);
+    final double meanLogRate = Arrays.stream(results).map(Result::getRate).collect(Collectors.summarizingDouble(Math::log10)).getAverage();
+    System.out.format("Mean log-rate: %,.4f [%,.0f]\n", meanLogRate, Math.pow(10, meanLogRate));
   }
 }

@@ -1,6 +1,5 @@
 package com.obsidiandynamics.transram;
 
-import com.obsidiandynamics.transram.SrmlMap.*;
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.spec.*;
 
@@ -27,7 +26,7 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
 
   private final Options options;
 
-  private final Map<K, Versioned<V>> store = new ConcurrentHashMap<>();
+  private final Map<K, GenericVersioned<V>> store = new ConcurrentHashMap<>();
 
   private final StripedMutexes<UpgradeableMutex> mutexes;
 
@@ -43,13 +42,13 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
     return new Ss2plContext<>(this, options.mutexTimeoutMs);
   }
 
-  Map<K, Versioned<V>> getStore() {
+  Map<K, GenericVersioned<V>> getStore() {
     return store;
   }
 
   private final Debug<K, V> debug = new Debug<>() {
     @Override
-    public Map<K, Versioned<V>> dirtyView() {
+    public Map<K, GenericVersioned<V>> dirtyView() {
       return Map.copyOf(store);
     }
 

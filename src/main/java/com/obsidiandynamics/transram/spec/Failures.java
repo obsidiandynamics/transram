@@ -8,6 +8,7 @@ public final class Failures {
   public final AtomicLong mutex = new AtomicLong();
   public final AtomicLong snapshot = new AtomicLong();
   public final AtomicLong antidependency = new AtomicLong();
+  public final AtomicLong lifecycle = new AtomicLong();
 
   public void increment(ConcurrentModeFailure e) {
     if (e instanceof MutexAcquisitionFailure) {
@@ -16,6 +17,8 @@ public final class Failures {
       snapshot.incrementAndGet();
     } else if (e instanceof AntidependencyFailure) {
       antidependency.incrementAndGet();
+    } else if (e instanceof LifecycleFailure) {
+      lifecycle.incrementAndGet();
     } else {
       throw new UnsupportedOperationException("Unsupported concurrent mode failure type " + e.getClass().getName());
     }

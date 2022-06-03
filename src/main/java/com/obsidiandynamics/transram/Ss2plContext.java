@@ -2,6 +2,7 @@ package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
+import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 
@@ -14,7 +15,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   private final Set<MutexRef<UpgradeableMutex>> writeMutexes = new HashSet<>();
 
-  private final Map<K, Versioned<V>> localValues = new HashMap<>();
+  private final Map<K, GenericVersioned<V>> localValues = new HashMap<>();
 
   private final Set<K> stagedWrites = new HashSet<>();
 
@@ -53,19 +54,36 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       }
     }
 
-    final Versioned<V> versioned = map.getStore().get(key);
+    final GenericVersioned<V> versioned = map.getStore().get(key);
     if (versioned != null) {
       final var cloned = versioned.deepClone();
       localValues.put(key, cloned);
       return cloned.getValue();
     } else {
-      localValues.put(key, Versioned.unset());
+      localValues.put(key, GenericVersioned.unset());
       return null;
     }
   }
 
   @Override
-  public void write(K key, V value) throws MutexAcquisitionFailure {
+  public void insert(K key, V value) throws MutexAcquisitionFailure {
+    Assert.that(value != null, () -> "Cannot insert null value");
+    write(key, value);
+  }
+
+  @Override
+  public void update(K key, V value) throws MutexAcquisitionFailure {
+    Assert.that(value != null, () -> "Cannot update null value");
+    write(key, value);
+  }
+
+  @Override
+  public void delete(K key) throws MutexAcquisitionFailure {
+    write(key, null);
+  }
+
+  private void write(K key, V value) throws MutexAcquisitionFailure {
+    Assert.that(key != null, () -> "Cannot write null key");
     ensureOpen();
     final var mutex = map.getMutexes().forKey(key);
     final var addedMutex = writeMutexes.add(mutex);
@@ -98,7 +116,12 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     }
 
     stagedWrites.add(key);
-    localValues.put(key, new Versioned<>(-1, value));
+    localValues.put(key, new GenericVersioned<>(-1, value));
+  }
+
+  @Override
+  public int size() {
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -133,7 +156,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     for (var key : stagedWrites) {
       final var local = localValues.get(key);
       if (local.hasValue()) {
-        map.getStore().put(key, new Versioned<>(version, local.getValue()));
+        map.getStore().put(key, new GenericVersioned<>(version, local.getValue()));
       } else {
         map.getStore().remove(key);
       }

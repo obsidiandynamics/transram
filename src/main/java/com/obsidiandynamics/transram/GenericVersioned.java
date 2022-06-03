@@ -1,11 +1,11 @@
 package com.obsidiandynamics.transram;
 
-public final class Versioned<V extends DeepCloneable<V>> implements DeepCloneable<Versioned<V>> {
+public final class GenericVersioned<V extends DeepCloneable<V>> implements DeepCloneable<GenericVersioned<V>> {
   private final long version;
 
   private final V value;
 
-  public Versioned(long version, V value) {
+  public GenericVersioned(long version, V value) {
     this.version = version;
     this.value = value;
   }
@@ -27,7 +27,7 @@ public final class Versioned<V extends DeepCloneable<V>> implements DeepCloneabl
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    final Versioned<?> versioned = (Versioned<?>) o;
+    final GenericVersioned<?> versioned = (GenericVersioned<?>) o;
 
     if (version != versioned.version) return false;
     return value.equals(versioned.value);
@@ -42,16 +42,16 @@ public final class Versioned<V extends DeepCloneable<V>> implements DeepCloneabl
 
   @Override
   public String toString() {
-    return Versioned.class.getSimpleName()+ "[version=" + version +
+    return GenericVersioned.class.getSimpleName()+ "[version=" + version +
         ", value=" + value + ']';
   }
 
-  public static <V extends DeepCloneable<V>> Versioned<V> unset() {
-    return new Versioned<>(-1, null);
+  public static <V extends DeepCloneable<V>> GenericVersioned<V> unset() {
+    return new GenericVersioned<>(-1, null);
   }
 
   @Override
-  public Versioned<V> deepClone() {
-    return value == null ? this : new Versioned<>(version, value.deepClone());
+  public GenericVersioned<V> deepClone() {
+    return value == null ? this : new GenericVersioned<>(version, value.deepClone());
   }
 }

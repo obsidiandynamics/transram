@@ -28,7 +28,7 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
 
   private final int queueDepth;
 
-  private final Map<Key, Deque<Versioned<V>>> store = new ConcurrentHashMap<>();
+  private final Map<Key, Deque<RawVersioned>> store = new ConcurrentHashMap<>();
 
   private final StripedMutexes<Mutex> mutexes;
 
@@ -43,6 +43,7 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
   public SrmlMap(Options options) {
     queueDepth = options.queueDepth;
     mutexes = new StripedMutexes<>(options.mutexStripes, options.mutexFactory);
+    store.put(InternalKey.SIZE, wrapInDeque(new RawVersioned(0, new Size(0))));
   }
 
   int getQueueDepth() {
@@ -56,17 +57,17 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
 
   Object getContextLock() { return contextLock; }
 
-  Map<Key, Deque<Versioned<V>>> getStore() {
+  Map<Key, Deque<RawVersioned>> getStore() {
     return store;
   }
 
   private final Debug<K, V> debug = new Debug<>() {
     @Override
-    public Map<K, Versioned<V>> dirtyView() {
+    public Map<K, GenericVersioned<V>> dirtyView() {
       return store.entrySet().stream()
           .filter(e -> e.getKey() instanceof  WrapperKey<?>)
           .collect(Collectors.toUnmodifiableMap(e -> Unsafe.<K>cast(((WrapperKey<?>) e.getKey()).unwrap()),
-                                                e -> e.getValue().getFirst()));
+                                                 e -> e.getValue().getFirst().generify()));
     }
 
     @Override
@@ -95,4 +96,10 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
   }
 
   AtomicLong safeReadVersion() { return safeReadVersion; }
+
+  static Deque<RawVersioned> wrapInDeque(RawVersioned versioned) {
+    final var deque = new ConcurrentLinkedDeque<RawVersioned>();
+    deque.add(versioned);
+    return deque;
+  }
 }

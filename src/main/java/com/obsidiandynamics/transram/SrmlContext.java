@@ -2,9 +2,9 @@ package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
+import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
-import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
 public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
@@ -14,7 +14,13 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private final Set<Key> writes = new HashSet<>();
 
-  private final Map<Key, Versioned<V>> localValues = new HashMap<>();
+  private final Map<Key, RawVersioned> localValues = new HashMap<>();
+
+  private enum ItemState {
+    INSERTED, EXISTING, DELETED
+  }
+
+  private final Map<Key, ItemState> itemStates = new HashMap<>();
 
   private final long readVersion;
 
@@ -30,29 +36,34 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   @Override
   public V read(K key) throws BrokenSnapshotFailure {
+    return Unsafe.cast(__read(WrapperKey.wrap(key)));
+  }
+
+  private Object __read(Key key) throws BrokenSnapshotFailure {
     ensureOpen();
-    final var wrapperKey = WrapperKey.wrap(key);
-    final var existing = localValues.get(wrapperKey);
+    final var existing = localValues.get(key);
     if (existing != null) {
-      return existing.getValue();
+      return Unsafe.cast(existing.getValue());
     }
 
     // don't enrol as a read if it already appears as a write
-    if (! writes.contains(wrapperKey)) {
-      reads.add(wrapperKey);
+    if (! writes.contains(key)) {
+      reads.add(key);
     }
 
-    final var storedValues = map.getStore().get(wrapperKey);
+    final var storedValues = map.getStore().get(key);
     if (storedValues == null) {
-      final var nullValue = new Versioned<V>(readVersion, null);
-      localValues.put(wrapperKey, nullValue);
-      return nullValue.getValue();
+      final var nullValue = new RawVersioned(readVersion, null);
+      localValues.put(key, nullValue);
+      itemStates.put(key, ItemState.DELETED);
+      return null;
     } else {
       for (var storedValue : storedValues) {
         if (storedValue.getVersion() <= readVersion) {
           final var clonedValue = storedValue.deepClone();
-          localValues.put(wrapperKey, clonedValue);
-          return clonedValue.getValue();
+          itemStates.put(key, clonedValue.hasValue() ? ItemState.EXISTING : ItemState.DELETED);
+          localValues.put(key, clonedValue);
+          return Unsafe.cast(clonedValue.getValue());
         }
       }
 
@@ -61,11 +72,60 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   @Override
-  public void write(K key, V value) {
+  public void insert(K key, V value) throws BrokenSnapshotFailure {
+    Assert.that(key != null, () -> "Cannot insert null key");
+    Assert.that(value != null, () -> "Cannot insert null value");
+    final var wrappedKey = WrapperKey.wrap(key);
+    write(wrappedKey, value);
+    final var lastItemState = itemStates.put(wrappedKey, ItemState.INSERTED);
+    if (lastItemState == ItemState.EXISTING) {
+      throw new IllegalStateException("Cannot insert over an existing item for key " + key);
+    }
+    alterSize(1);
+  }
+
+  @Override
+  public void update(K key, V value) {
+    Assert.that(key != null, () -> "Cannot update null key");
+    Assert.that(value != null, () -> "Cannot update null value");
+    final var wrappedKey = WrapperKey.wrap(key);
+    write(wrappedKey, value);
+    final var lastItemState = itemStates.put(wrappedKey, ItemState.EXISTING);
+    if (lastItemState == ItemState.DELETED) {
+      throw new IllegalStateException("Cannot update a deleted item for key " + key);
+    }
+  }
+
+  @Override
+  public void delete(K key) throws BrokenSnapshotFailure {
+    Assert.that(key != null, () -> "Cannot delete null key");
+    final var wrappedKey = WrapperKey.wrap(key);
+    write(wrappedKey, null);
+    final var lastItemState = itemStates.put(wrappedKey, ItemState.DELETED);
+    if (lastItemState == ItemState.DELETED) {
+      throw new IllegalStateException("Cannot deleted a previously deleted item for key " + key);
+    }
+    alterSize(-1);
+  }
+
+  private void write(Key key, DeepCloneable<?> value) {
     ensureOpen();
-    final var wrapperKey = WrapperKey.wrap(key);
-    localValues.put(wrapperKey, new Versioned<>(-1, value));
-    writes.add(wrapperKey);
+    localValues.put(key, new RawVersioned(-1, value));
+    writes.add(key);
+  }
+
+  private void alterSize(int sizeChange) throws BrokenSnapshotFailure {
+    final var size = (Size) __read(InternalKey.SIZE);
+    Assert.that(size != null, () -> "No size object");
+    size.set(size.get() + sizeChange);
+    write(InternalKey.SIZE, size);
+  }
+
+  @Override
+  public int size() throws BrokenSnapshotFailure {
+    final var size = (Size) __read(InternalKey.SIZE);
+    Assert.that(size != null, () -> "No size object");
+    return size.get();
   }
 
   @Override
@@ -94,7 +154,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   @Override
-  public void close() throws MutexAcquisitionFailure, AntidependencyFailure {
+  public void close() throws MutexAcquisitionFailure, AntidependencyFailure, LifecycleFailure {
     if (state.get() != State.OPEN) {
       return;
     }
@@ -153,18 +213,43 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       }
     }
 
+    for (var stateEntry : itemStates.entrySet()) {
+      final var key = stateEntry.getKey();
+      if (writes.contains(key)) {
+        final var existingValues = map.getStore().get(key);
+        switch (stateEntry.getValue()) {
+          case INSERTED -> {
+            if (existingValues != null && existingValues.getFirst().hasValue()) {
+              rollbackFromCommitAttempt(combinedMutexes);
+              throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+            }
+          }
+          case EXISTING -> {
+            if (existingValues == null || !existingValues.getFirst().hasValue()) {
+              rollbackFromCommitAttempt(combinedMutexes);
+              throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+            }
+          }
+          case DELETED -> {
+            if (existingValues == null || !existingValues.getFirst().hasValue()) {
+              rollbackFromCommitAttempt(combinedMutexes);
+              throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+            }
+          }
+        }
+      }
+    }
+
     synchronized (map.getContextLock()) {
       writeVersion = map.incrementAndGetVersion();
       map.getQueuedContexts().addLast(this);
     }
 
     for (var write : writes) {
-      final var replacementValue = new Versioned<>(writeVersion, localValues.get(write).getValue());
+      final var replacementValue = new RawVersioned(writeVersion, localValues.get(write).getValue());
        map.getStore().compute(write, (__, previousValues) -> {
          if (previousValues == null) {
-           final var newValues = new ConcurrentLinkedDeque<Versioned<V>>();
-           newValues.add(replacementValue);
-           return newValues;
+           return SrmlMap.wrapInDeque(replacementValue);
          } else {
            previousValues.addFirst(replacementValue);
            return previousValues;

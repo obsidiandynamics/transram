@@ -7,7 +7,13 @@ public interface TransContext <K, V extends DeepCloneable<V>> extends AutoClosea
 
   V read(K key) throws ConcurrentModeFailure;
 
-  void write(K key, V value) throws ConcurrentModeFailure;
+  void insert(K key, V value) throws ConcurrentModeFailure;
+
+  void update(K key, V value) throws ConcurrentModeFailure;
+
+  void delete(K key) throws ConcurrentModeFailure;
+
+  int size() throws ConcurrentModeFailure;
 
   void rollback();
 

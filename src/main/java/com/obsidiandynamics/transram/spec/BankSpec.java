@@ -72,10 +72,13 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
   public BankState instantiateState(TransMap<Integer, Account> map) {
     // initialise bank accounts
     for (var i = 0; i < options.numAccounts; i++) {
-      final var accountId = i; Enclose.over(map).transact(ctx -> {
+      final var accountId = i;
+      Enclose.over(map).transact(ctx -> {
+        Assert.that(ctx.size() == accountId);
         final var existingAccount = ctx.read(accountId);
         Assert.that(existingAccount == null, () -> String.format("Found existing account %d (%s)", accountId, existingAccount));
-        ctx.write(accountId, new Account(accountId, options.initialBalance));
+        ctx.insert(accountId, new Account(accountId, options.initialBalance));
+        Assert.that(ctx.size() == accountId + 1);
         return Action.COMMIT;
       });
     }
@@ -144,8 +147,8 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
 
           fromAccount.setBalance(newFromBalance);
           toAccount.setBalance(toAccount.getBalance() + amount);
-          ctx.write(fromAccountId, fromAccount);
-          ctx.write(toAccountId, toAccount);
+          ctx.update(fromAccountId, fromAccount);
+          ctx.update(toAccountId, toAccount);
           think(options.thinkTimeMs);
           return Action.COMMIT;
         });
@@ -171,26 +174,26 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
             }
             final var xferAmount = 1 + (int) (rng.nextDouble() * (accountB.getBalance() - 1));
             final var newAccountA = new Account(accountAId, xferAmount);
-            ctx.write(accountAId, newAccountA);
+            ctx.insert(accountAId, newAccountA);
             accountB.setBalance(accountB.getBalance() - xferAmount);
-            ctx.write(accountBId, accountB);
+            ctx.update(accountBId, accountB);
           } else if (accountB == null) {
             if (accountA.getBalance() == 0) {
               return Action.ROLLBACK_AND_RESET;
             }
             final var xferAmount = 1 + (int) (rng.nextDouble() * (accountA.getBalance() - 1));
             final var newAccountB = new Account(accountBId, xferAmount);
-            ctx.write(accountBId, newAccountB);
+            ctx.insert(accountBId, newAccountB);
             accountA.setBalance(accountA.getBalance() - xferAmount);
-            ctx.write(accountAId, accountA);
+            ctx.update(accountAId, accountA);
           } else if (rng.nextDouble() > 0.5) {
             accountA.setBalance(accountA.getBalance() + accountB.getBalance());
-            ctx.write(accountAId, accountA);
-            ctx.write(accountBId, null);
+            ctx.update(accountAId, accountA);
+            ctx.delete(accountBId);
           } else {
             accountB.setBalance(accountA.getBalance() + accountB.getBalance());
-            ctx.write(accountBId, accountB);
-            ctx.write(accountAId, null);
+            ctx.update(accountBId, accountB);
+            ctx.delete(accountAId);
           }
           return Action.COMMIT;
         });
@@ -221,6 +224,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
       dumpMap(state.map);
     }
     checkMapSum(state.map, options);
+    checkMapSize(state.map, options);
   }
 
   private static void dumpMap(TransMap<?, ?> map) {
@@ -231,10 +235,18 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
 
   private static void checkMapSum(TransMap<?, Account> map, BankOptions options) {
     final var values = map.debug().dirtyView().values();
-    final var sum = values.stream().filter(Versioned::hasValue).map(Versioned::getValue).mapToLong(Account::getBalance).sum();
+    final var sum = values.stream().filter(GenericVersioned::hasValue).map(GenericVersioned::getValue).mapToLong(Account::getBalance).sum();
     final var expectedSum = options.numAccounts * options.initialBalance;
     Assert.that(expectedSum == sum, () -> String.format("Expected: %d, actual: %d", expectedSum, sum));
-    final var min = values.stream().filter(Versioned::hasValue).map(Versioned::getValue).mapToLong(Account::getBalance).min().orElseThrow();
+    final var min = values.stream().filter(GenericVersioned::hasValue).map(GenericVersioned::getValue).mapToLong(Account::getBalance).min().orElseThrow();
     Assert.that(min >= 0, () -> String.format("Minimum balance is %d", min));
+  }
+
+  private static void checkMapSize(TransMap<?, Account> map, BankOptions options) {
+    Enclose.over(map).transact(ctx -> {
+      final var actualSize = ctx.size();
+      Assert.that(actualSize <= options.numAccounts, () -> String.format("Number of accounts (%d) exceeds the maximum (%d)", actualSize, options.numAccounts));
+      return Action.ROLLBACK;
+    });
   }
 }
