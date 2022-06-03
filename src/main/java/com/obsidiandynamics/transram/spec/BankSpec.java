@@ -41,9 +41,10 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
   }};
 
   private static final double[][] DEF_PROFILES = {
-      {0.1, 0.0, 0.6, 0.3},
-      {0.5, 0.0, 0.3, 0.2},
-      {0.9, 0.0, 0.06, 0.04}
+      {0.1, 0.0, 0.9, 0.0},
+      {0.1, 0.0, 0.8, 0.1},
+      {0.5, 0.0, 0.4, 0.1},
+      {0.9, 0.0, 0.1, 0.0}
   };
 
   final double[][] profiles;

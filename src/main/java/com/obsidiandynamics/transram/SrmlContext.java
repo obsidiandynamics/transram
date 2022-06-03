@@ -18,6 +18,10 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private final Map<Key, Tracker> local = new HashMap<>();
 
+  private enum ItemState {
+    INSERTED, EXISTING, DELETED
+  }
+
   private static final class Tracker {
     DeepCloneable<?> value;
 
@@ -25,18 +29,17 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
     boolean written;
 
-    Tracker(DeepCloneable<?> value, boolean read, boolean written) {
+    ItemState state;
+
+    Tracker(DeepCloneable<?> value, boolean read, boolean written, ItemState state) {
       this.value = value;
       this.read = read;
       this.written = written;
+      this.state = state;
     }
   }
 
-  private enum ItemState {
-    INSERTED, EXISTING, DELETED
-  }
-
-  private final Map<Key, ItemState> itemStates = new HashMap<>();
+//  private final Map<Key, ItemState> itemStates = new HashMap<>();
 
   private final long readVersion;
 
@@ -71,15 +74,16 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
     final var storedValues = map.getStore().get(key);
     if (storedValues == null) {
-      local.put(key, new Tracker(null, true, false));
-      itemStates.put(key, ItemState.DELETED);
+      local.put(key, new Tracker(null, true, false, ItemState.DELETED));
+//      itemStates.put(key, ItemState.DELETED);
       return null;
     } else {
       for (var storedValue : storedValues) {
         if (storedValue.getVersion() <= readVersion) {
           final var clonedValue = DeepCloneable.clone(Unsafe.cast(storedValue.getValue()));
-          itemStates.put(key, clonedValue != null ? ItemState.EXISTING : ItemState.DELETED);
-          local.put(key, new Tracker(clonedValue, true, false));
+//          itemStates.put(key, clonedValue != null ? ItemState.EXISTING : ItemState.DELETED);
+          final var itemState = clonedValue != null ? ItemState.EXISTING : ItemState.DELETED;
+          local.put(key, new Tracker(clonedValue, true, false, itemState));
           return clonedValue;
         }
       }
@@ -93,11 +97,11 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     Assert.that(key != null, () -> "Cannot insert null key");
     Assert.that(value != null, () -> "Cannot insert null value");
     final var wrappedKey = WrapperKey.wrap(key);
-    write(wrappedKey, value);
-    final var lastItemState = itemStates.put(wrappedKey, ItemState.INSERTED);
-    if (lastItemState == ItemState.EXISTING) {
-      throw new IllegalStateException("Cannot insert over an existing item for key " + key);
-    }
+    write(wrappedKey, value, ItemState.INSERTED);
+//    final var lastItemState = itemStates.put(wrappedKey, ItemState.INSERTED);
+//    if (lastItemState == ItemState.EXISTING) {
+//      throw new IllegalStateException("Cannot insert over an existing item for key " + key);
+//    }
     alterSize(1);
   }
 
@@ -106,34 +110,52 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     Assert.that(key != null, () -> "Cannot update null key");
     Assert.that(value != null, () -> "Cannot update null value");
     final var wrappedKey = WrapperKey.wrap(key);
-    write(wrappedKey, value);
-    final var lastItemState = itemStates.put(wrappedKey, ItemState.EXISTING);
-    if (lastItemState == ItemState.DELETED) {
-      throw new IllegalStateException("Cannot update a deleted item for key " + key);
-    }
+    write(wrappedKey, value, ItemState.EXISTING);
+//    final var lastItemState = itemStates.put(wrappedKey, ItemState.EXISTING);
+//    if (lastItemState == ItemState.DELETED) {
+//      throw new IllegalStateException("Cannot update a deleted item for key " + key);
+//    }
   }
 
   @Override
   public void delete(K key) throws BrokenSnapshotFailure {
     Assert.that(key != null, () -> "Cannot delete null key");
     final var wrappedKey = WrapperKey.wrap(key);
-    write(wrappedKey, null);
-    final var lastItemState = itemStates.put(wrappedKey, ItemState.DELETED);
-    if (lastItemState == ItemState.DELETED) {
-      throw new IllegalStateException("Cannot delete a previously deleted item for key " + key);
-    }
+    write(wrappedKey, null, ItemState.DELETED);
+//    final var lastItemState = itemStates.put(wrappedKey, ItemState.DELETED);
+//    if (lastItemState == ItemState.DELETED) {
+//      throw new IllegalStateException("Cannot delete a previously deleted item for key " + key);
+//    }
     alterSize(-1);
   }
 
-  private void write(Key key, DeepCloneable<?> value) {
+  private void write(Key key, DeepCloneable<?> value, ItemState state) {
     ensureOpen();
     local.compute(key, (__, existing) -> {
       if (existing != null) {
+        switch (state) {
+          case INSERTED -> {
+            if (existing.state == ItemState.EXISTING) {
+              throw new IllegalStateException("Cannot insert an existing item for key " + key);
+            }
+          }
+          case EXISTING -> {
+            if (existing.state == ItemState.DELETED) {
+              throw new IllegalStateException("Cannot update a deleted item for key " + key);
+            }
+          }
+          case DELETED -> {
+            if (existing.state == ItemState.DELETED) {
+              throw new IllegalStateException("Cannot delete a non-existent item for key " + key);
+            }
+          }
+        }
         existing.value = value;
         existing.written = true;
+        existing.state = state;
         return existing;
       } else {
-        return new Tracker(value, false, true);
+        return new Tracker(value, false, true, state);
       }
     });
 //    writes.add(key);
@@ -143,7 +165,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     final var size = (Size) __read(InternalKey.SIZE);
     Assert.that(size != null, () -> "No size object");
     size.set(size.get() + sizeChange);
-    write(InternalKey.SIZE, size);
+    write(InternalKey.SIZE, size, ItemState.EXISTING);
   }
 
   @Override
@@ -276,8 +298,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
         }
       } else {
         final var existingValues = map.getStore().get(key);
-        final var itemState = itemStates.get(key);
-        switch (itemState) {
+        switch (entry.getValue().state) {
           case INSERTED -> {
             if (existingValues != null && existingValues.getFirst().hasValue()) {
               rollbackFromCommitAttempt(combinedMutexes);
