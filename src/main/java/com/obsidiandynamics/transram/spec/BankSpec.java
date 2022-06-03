@@ -225,7 +225,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
       dumpMap(state.map);
     }
     checkMapSum(state.map, options);
-    checkMapSize(state.map, options);
+    checkMapSizeAndKeys(state.map, options);
   }
 
   private static void dumpMap(TransMap<?, ?> map) {
@@ -243,10 +243,17 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
     Assert.that(min >= 0, () -> String.format("Minimum balance is %d", min));
   }
 
-  private static void checkMapSize(TransMap<?, Account> map, BankOptions options) {
+  private static void checkMapSizeAndKeys(TransMap<Integer, Account> map, BankOptions options) {
     Enclose.over(map).transact(ctx -> {
       final var actualSize = ctx.size();
       Assert.that(actualSize <= options.numAccounts, () -> String.format("Number of accounts (%d) exceeds the maximum (%d)", actualSize, options.numAccounts));
+
+      final var excessKeys = ctx.keys(key -> key > options.numAccounts - 1);
+      Assert.that(excessKeys.isEmpty(), () -> String.format("Unexpected excess of keys: %s", excessKeys));
+
+      final var keys = ctx.keys(key -> key <= options.numAccounts - 1);
+      Assert.that(keys.size() == actualSize, () -> String.format("Unexpected number of keys: %s", keys));
+
       return Action.ROLLBACK;
     });
   }

@@ -128,7 +128,7 @@ public final class Harness {
 
   private static void dumpProfiles(String[] operationNames, double[][] profiles) {
     final var padding = new int[profiles.length + 1];
-    padding[0] = 25;
+    padding[0] = 21;
     for (var i = 1; i < padding.length; i++) {
       padding[i] = 5;
     }
@@ -147,7 +147,7 @@ public final class Harness {
   }
 
   private static void dumpSummaries(Result[] results) {
-    final var padding = new int[] {25, 15, 15, 15, 13, 15, 15, 15, 10, 10};
+    final var padding = new int[] {8, 9, 15, 15, 13, 15, 15, 15, 10, 10};
     System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "l.cycle faults", "efficiency", "refs");
     System.out.format(layout(padding), fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
@@ -157,7 +157,7 @@ public final class Harness {
       final var totalFailures = result.failures.mutex.get() + result.failures.snapshot.get() + result.failures.antidependency.get();
       System.out.format(layout(padding),
                         i + 1,
-                        String.format("%,.3f", result.elapsedMs / 1000f),
+                        String.format("%,.1f", result.elapsedMs / 1000f),
                         String.format("%,d", totalOps),
                         String.format("%,.0f", 1000d * totalOps / result.elapsedMs),
                         String.format("%,d", result.failures.mutex.get()),

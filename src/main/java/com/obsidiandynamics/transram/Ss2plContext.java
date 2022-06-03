@@ -5,6 +5,7 @@ import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
+import java.util.function.*;
 
 public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
   private final long mutexTimeoutMs;
@@ -56,7 +57,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
     final var mutex = map.getMutexes().forKey(key);
     // don't lock for reading if we already have a write lock
-    if (! writeMutexes.contains(mutex)) {
+    if (!writeMutexes.contains(mutex)) {
       final var addedMutex = readMutexes.add(mutex);
       if (addedMutex) {
         try {
@@ -72,15 +73,38 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       }
     }
 
-    final RawVersioned versioned = map.getStore().get(key);
-    if (versioned != null) {
-      final var cloned = DeepCloneable.clone(Unsafe.cast(versioned.getValue()));
+    final var stored = map.getStore().get(key);
+    if (stored != null) {
+      final var cloned = DeepCloneable.clone(Unsafe.cast(stored.getValue()));
       local.put(key, new Tracker(cloned, ItemState.EXISTING, false));
       return cloned;
     } else {
       local.put(key, new Tracker(null, ItemState.DELETED, false));
       return null;
     }
+  }
+
+  @Override
+  public Set<K> keys(Predicate<K> predicate) throws MutexAcquisitionFailure {
+    ensureOpen();
+    size();
+    final var keys = new HashSet<K>();
+    for (var entry : map.getStore().entrySet()) {
+      final var key = entry.getKey();
+      if (key instanceof KeyRef && predicate.test(Unsafe.cast(((KeyRef<?>) key).unwrap()))) {
+        final var tracker = local.get(key);
+        if (tracker != null) {
+          if (tracker.value != null) {
+            keys.add(Unsafe.cast(key));
+          }
+        } else {
+          if (entry.getValue().hasValue()) {
+            keys.add(Unsafe.cast(key));
+          }
+        }
+      }
+    }
+    return keys;
   }
 
   @Override
