@@ -15,9 +15,23 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   private final Set<MutexRef<UpgradeableMutex>> writeMutexes = new HashSet<>();
 
-  private final Map<K, GenericVersioned<V>> localValues = new HashMap<>();
+  private enum ItemState {
+    INSERTED, EXISTING, DELETED
+  }
 
-  private final Set<K> stagedWrites = new HashSet<>();
+  private static final class Tracker {
+    DeepCloneable<?> value;
+    ItemState state;
+
+    Tracker(DeepCloneable<?> value, ItemState state) {
+      this.value = value;
+      this.state = state;
+    }
+  }
+
+  private final Map<Key, Tracker> local = new HashMap<>();
+
+  private final Set<Key> writes = new HashSet<>();
 
   private long version;
 
@@ -27,13 +41,16 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     this.map = map;
     this.mutexTimeoutMs = mutexTimeoutMs;
   }
-
   @Override
   public V read(K key) throws MutexAcquisitionFailure {
+    return Unsafe.cast(read(Key.wrap(key)));
+  }
+
+  private DeepCloneable<?> read(Key key) throws MutexAcquisitionFailure {
     ensureOpen();
-    final var existing = localValues.get(key);
+    final var existing = local.get(key);
     if (existing != null) {
-      return existing.getValue();
+      return Unsafe.cast(existing.value);
     }
 
     final var mutex = map.getMutexes().forKey(key);
@@ -54,13 +71,13 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       }
     }
 
-    final GenericVersioned<V> versioned = map.getStore().get(key);
+    final RawVersioned versioned = map.getStore().get(key);
     if (versioned != null) {
-      final var cloned = versioned.deepClone();
-      localValues.put(key, cloned);
-      return cloned.getValue();
+      final var cloned = DeepCloneable.clone(Unsafe.cast(versioned.getValue()));
+      local.put(key, new Tracker(cloned, ItemState.EXISTING));
+      return cloned;
     } else {
-      localValues.put(key, GenericVersioned.unset());
+      local.put(key, new Tracker(null, ItemState.DELETED));
       return null;
     }
   }
@@ -68,21 +85,23 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   @Override
   public void insert(K key, V value) throws MutexAcquisitionFailure {
     Assert.that(value != null, () -> "Cannot insert null value");
-    write(key, value);
+    write(Key.wrap(key), value, ItemState.INSERTED);
+    alterSize(1);
   }
 
   @Override
   public void update(K key, V value) throws MutexAcquisitionFailure {
     Assert.that(value != null, () -> "Cannot update null value");
-    write(key, value);
+    write(Key.wrap(key), value, ItemState.EXISTING);
   }
 
   @Override
   public void delete(K key) throws MutexAcquisitionFailure {
-    write(key, null);
+    write(Key.wrap(key), null, ItemState.DELETED);
+    alterSize(-1);
   }
 
-  private void write(K key, V value) throws MutexAcquisitionFailure {
+  private void write(Key key, DeepCloneable<?> value, ItemState state) throws MutexAcquisitionFailure {
     ensureOpen();
     final var mutex = map.getMutexes().forKey(key);
     final var addedMutex = writeMutexes.add(mutex);
@@ -114,13 +133,47 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       }
     }
 
-    stagedWrites.add(key);
-    localValues.put(key, new GenericVersioned<>(-1, value));
+    writes.add(key);
+    local.compute(key, (__, existing) -> {
+      if (existing != null) {
+        switch (state) {
+          case INSERTED -> {
+            if (existing.state == ItemState.EXISTING) {
+              throw new IllegalStateException("Cannot insert an existing item for key " + key);
+            }
+          }
+          case EXISTING -> {
+            if (existing.state == ItemState.DELETED) {
+              throw new IllegalStateException("Cannot update a deleted item for key " + key);
+            }
+          }
+          case DELETED -> {
+            if (existing.state == ItemState.DELETED) {
+              throw new IllegalStateException("Cannot delete a non-existent item for key " + key);
+            }
+          }
+        }
+        existing.value = value;
+        existing.state = state;
+        return existing;
+      } else {
+        return new Tracker(value, state);
+      }
+    });
+  }
+
+  private void alterSize(int sizeChange) throws MutexAcquisitionFailure {
+    final var size = (Size) read(InternalKey.SIZE);
+    Assert.that(size != null, () -> "No size object");
+    size.set(size.get() + sizeChange);
+    write(InternalKey.SIZE, size, ItemState.EXISTING);
   }
 
   @Override
-  public int size() {
-    throw new UnsupportedOperationException();
+  public int size() throws MutexAcquisitionFailure {
+    final var size = (Size) read(InternalKey.SIZE);
+    Assert.that(size != null, () -> "No size object");
+    return size.get();
   }
 
   @Override
@@ -146,16 +199,42 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   }
 
   @Override
-  public void commit() {
+  public void commit() throws LifecycleFailure {
     if (state != State.OPEN) {
       return;
     }
 
+    for (var key : writes) {
+      final var tracker = local.get(key);
+      final var existingValue = map.getStore().get(key);
+      switch (tracker.state) {
+        case INSERTED -> {
+          if (existingValue != null) {
+            rollback();
+            throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+          }
+        }
+        case EXISTING -> {
+          if (existingValue == null) {
+            rollback();
+            throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+          }
+        }
+        case DELETED -> {
+          if (existingValue == null) {
+            rollback();
+            throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+          }
+        }
+      }
+    }
+
     version = map.version().incrementAndGet();
-    for (var key : stagedWrites) {
-      final var local = localValues.get(key);
-      if (local.hasValue()) {
-        map.getStore().put(key, new GenericVersioned<>(version, local.getValue()));
+
+    for (var key : writes) {
+      final var tracker = local.get(key);
+      if (tracker.value != null) {
+        map.getStore().put(key, new RawVersioned(version, tracker.value));
       } else {
         map.getStore().remove(key);
       }

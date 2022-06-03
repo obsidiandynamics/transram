@@ -35,10 +35,7 @@ public final class TimedRunner {
               }
             }
           }
-        } /*catch (Throwable e) {
-          e.printStackTrace();
-          throw e;
-        } */finally {
+        } finally {
           latch.countDown();
         }
       });

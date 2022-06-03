@@ -2,11 +2,13 @@ package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.spec.*;
+import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
+import java.util.stream.*;
 
 public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K, V> {
   public static class Options {
@@ -26,7 +28,7 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
 
   private final Options options;
 
-  private final Map<K, GenericVersioned<V>> store = new ConcurrentHashMap<>();
+  private final Map<Key, RawVersioned> store = new ConcurrentHashMap<>();
 
   private final StripedMutexes<UpgradeableMutex> mutexes;
 
@@ -35,6 +37,7 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
   public Ss2plMap(Options options) {
     this.options = options;
     mutexes = new StripedMutexes<>(options.mutexStripes, options.mutexFactory);
+    store.put(InternalKey.SIZE, new RawVersioned(0, new Size(0)));
   }
 
   @Override
@@ -42,14 +45,17 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
     return new Ss2plContext<>(this, options.mutexTimeoutMs);
   }
 
-  Map<K, GenericVersioned<V>> getStore() {
+  Map<Key, RawVersioned> getStore() {
     return store;
   }
 
   private final Debug<K, V> debug = new Debug<>() {
     @Override
     public Map<K, GenericVersioned<V>> dirtyView() {
-      return Map.copyOf(store);
+      return store.entrySet().stream()
+          .filter(e -> e.getKey() instanceof KeyRef<?>)
+          .collect(Collectors.toUnmodifiableMap(e -> Unsafe.<K>cast(((KeyRef<?>) e.getKey()).unwrap()),
+                                                e -> e.getValue().generify()));
     }
 
     @Override

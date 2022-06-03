@@ -50,7 +50,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     return Unsafe.cast(read(Key.wrap(key)));
   }
 
-  private Object read(Key key) throws BrokenSnapshotFailure {
+  private DeepCloneable<?> read(Key key) throws BrokenSnapshotFailure {
     ensureOpen();
     final var existing = local.get(key);
     if (existing != null) {
