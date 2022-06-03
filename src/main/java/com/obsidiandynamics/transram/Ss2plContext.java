@@ -33,8 +33,6 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   private final Map<Key, Tracker> local = new HashMap<>();
 
-//  private final Set<Key> writes = new HashSet<>();
-
   private long version;
 
   private State state = State.OPEN;
@@ -136,7 +134,6 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       }
     }
 
-//    writes.add(key);
     local.compute(key, (__, existing) -> {
       if (existing != null) {
         switch (state) {
@@ -208,30 +205,6 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       return;
     }
 
-//    for (var key : writes) {
-//      final var tracker = local.get(key);
-//      final var existingValue = map.getStore().get(key);
-//      switch (tracker.state) {
-//        case INSERTED -> {
-//          if (existingValue != null) {
-//            rollback();
-//            throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
-//          }
-//        }
-//        case EXISTING -> {
-//          if (existingValue == null) {
-//            rollback();
-//            throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
-//          }
-//        }
-//        case DELETED -> {
-//          if (existingValue == null) {
-//            rollback();
-//            throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
-//          }
-//        }
-//      }
-//    }
     for (var entry : local.entrySet()) {
       final var tracker = entry.getValue();
       if (tracker.written) {
@@ -262,14 +235,6 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
     version = map.version().incrementAndGet();
 
-//    for (var key : writes) {
-//      final var tracker = local.get(key);
-//      if (tracker.value != null) {
-//        map.getStore().put(key, new RawVersioned(version, tracker.value));
-//      } else {
-//        map.getStore().remove(key);
-//      }
-//    }
     for (var entry : local.entrySet()) {
       final var tracker = entry.getValue();
       if (tracker.written) {
