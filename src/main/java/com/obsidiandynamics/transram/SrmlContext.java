@@ -14,7 +14,15 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private final Set<Key> writes = new HashSet<>();
 
-  private final Map<Key, RawVersioned> localValues = new HashMap<>();
+  private final Map<Key, Tracker> local = new HashMap<>();
+
+  private static final class Tracker {
+    DeepCloneable<?> value;
+
+    Tracker(DeepCloneable<?> value) {
+      this.value = value;
+    }
+  }
 
   private enum ItemState {
     INSERTED, EXISTING, DELETED
@@ -41,9 +49,9 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private Object __read(Key key) throws BrokenSnapshotFailure {
     ensureOpen();
-    final var existing = localValues.get(key);
+    final var existing = local.get(key);
     if (existing != null) {
-      return Unsafe.cast(existing.getValue());
+      return Unsafe.cast(existing.value);
     }
 
     // don't enrol as a read if it already appears as a write
@@ -53,17 +61,16 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
     final var storedValues = map.getStore().get(key);
     if (storedValues == null) {
-      final var nullValue = new RawVersioned(readVersion, null);
-      localValues.put(key, nullValue);
+      local.put(key, new Tracker(null));
       itemStates.put(key, ItemState.DELETED);
       return null;
     } else {
       for (var storedValue : storedValues) {
         if (storedValue.getVersion() <= readVersion) {
-          final var clonedValue = storedValue.deepClone();
-          itemStates.put(key, clonedValue.hasValue() ? ItemState.EXISTING : ItemState.DELETED);
-          localValues.put(key, clonedValue);
-          return Unsafe.cast(clonedValue.getValue());
+          final var clonedValue = DeepCloneable.clone(Unsafe.cast(storedValue.getValue()));
+          itemStates.put(key, clonedValue != null ? ItemState.EXISTING : ItemState.DELETED);
+          local.put(key, new Tracker(clonedValue));
+          return clonedValue;
         }
       }
 
@@ -110,7 +117,14 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private void write(Key key, DeepCloneable<?> value) {
     ensureOpen();
-    localValues.put(key, new RawVersioned(-1, value));
+    local.compute(key, (__, existing) -> {
+      if (existing != null) {
+        existing.value = value;
+        return existing;
+      } else {
+        return new Tracker(value);
+      }
+    });
     writes.add(key);
   }
 
@@ -246,7 +260,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     }
 
     for (var write : writes) {
-      final var replacementValue = new RawVersioned(writeVersion, localValues.get(write).getValue());
+      final var replacementValue = new RawVersioned(writeVersion, local.get(write).value);
        map.getStore().compute(write, (__, previousValues) -> {
          if (previousValues == null) {
            return SrmlMap.wrapInDeque(replacementValue);
