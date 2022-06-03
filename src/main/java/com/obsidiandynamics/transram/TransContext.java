@@ -1,6 +1,6 @@
 package com.obsidiandynamics.transram;
 
-public interface TransContext <K, V extends DeepCloneable<V>> extends AutoCloseable {
+public interface TransContext <K, V extends DeepCloneable<V>> {
   enum State {
     OPEN, ROLLED_BACK, COMMITTED
   }
@@ -21,6 +21,5 @@ public interface TransContext <K, V extends DeepCloneable<V>> extends AutoClosea
 
   long getVersion();
 
-  @Override
-  void close() throws ConcurrentModeFailure;
+  void commit() throws ConcurrentModeFailure;
 }

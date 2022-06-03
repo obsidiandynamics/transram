@@ -5,22 +5,30 @@ import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
+import java.util.Map.*;
 import java.util.concurrent.atomic.*;
+import java.util.stream.*;
 
 public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
   private final SrmlMap<K, V> map;
 
-  private final Set<Key> reads = new HashSet<>();
+//  private final Set<Key> reads = new HashSet<>();
 
-  private final Set<Key> writes = new HashSet<>();
+//  private final Set<Key> writes = new HashSet<>();
 
   private final Map<Key, Tracker> local = new HashMap<>();
 
   private static final class Tracker {
     DeepCloneable<?> value;
 
-    Tracker(DeepCloneable<?> value) {
+    final boolean read;
+
+    boolean written;
+
+    Tracker(DeepCloneable<?> value, boolean read, boolean written) {
       this.value = value;
+      this.read = read;
+      this.written = written;
     }
   }
 
@@ -55,13 +63,15 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     }
 
     // don't enrol as a read if it already appears as a write
-    if (! writes.contains(key)) {
-      reads.add(key);
-    }
+//    if (! writes.contains(key)) {
+//      reads.add(key);
+//    } else {
+//      throw new AssertionError();
+//    }
 
     final var storedValues = map.getStore().get(key);
     if (storedValues == null) {
-      local.put(key, new Tracker(null));
+      local.put(key, new Tracker(null, true, false));
       itemStates.put(key, ItemState.DELETED);
       return null;
     } else {
@@ -69,7 +79,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
         if (storedValue.getVersion() <= readVersion) {
           final var clonedValue = DeepCloneable.clone(Unsafe.cast(storedValue.getValue()));
           itemStates.put(key, clonedValue != null ? ItemState.EXISTING : ItemState.DELETED);
-          local.put(key, new Tracker(clonedValue));
+          local.put(key, new Tracker(clonedValue, true, false));
           return clonedValue;
         }
       }
@@ -110,7 +120,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     write(wrappedKey, null);
     final var lastItemState = itemStates.put(wrappedKey, ItemState.DELETED);
     if (lastItemState == ItemState.DELETED) {
-      throw new IllegalStateException("Cannot deleted a previously deleted item for key " + key);
+      throw new IllegalStateException("Cannot delete a previously deleted item for key " + key);
     }
     alterSize(-1);
   }
@@ -120,12 +130,13 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     local.compute(key, (__, existing) -> {
       if (existing != null) {
         existing.value = value;
+        existing.written = true;
         return existing;
       } else {
-        return new Tracker(value);
+        return new Tracker(value, false, true);
       }
     });
-    writes.add(key);
+//    writes.add(key);
   }
 
   private void alterSize(int sizeChange) throws BrokenSnapshotFailure {
@@ -168,25 +179,47 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   @Override
-  public void close() throws MutexAcquisitionFailure, AntidependencyFailure, LifecycleFailure {
-    if (state.get() != State.OPEN) {
-      return;
-    }
+  public void commit() throws MutexAcquisitionFailure, AntidependencyFailure, LifecycleFailure {
+    ensureOpen();
+
+//    final var trackedReads = local.entrySet().stream().filter(e -> e.getValue().read).map(Entry::getKey).collect(Collectors.toSet());
+//    Assert.that(reads.equals(trackedReads), () -> {
+//      new Exception("Stack trace").printStackTrace(System.out);
+//            System.out.printf("reads: %s, trackedReads: %s\n", reads, trackedReads);
+//      return String.format("reads: %s, trackedReads: %s", reads, trackedReads);
+//    });
 
     final var combinedMutexes = new TreeMap<MutexRef<Mutex>, LockModeAndState>();
-    for (var read : reads) {
-      final var mutex = getMutex(read);
-      if (writes.contains(read)) {
+//    for (var read : reads) {
+//      final var mutex = getMutex(read);
+//      if (writes.contains(read)) {
+//        combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
+//      } else if (! combinedMutexes.containsKey(mutex)) {
+//        combinedMutexes.put(mutex, new LockModeAndState(LockMode.READ));
+//      }
+//    }
+    for (var entry : local.entrySet()) {
+      final var tracker = entry.getValue();
+      final var mutex = getMutex(entry.getKey());
+      if (tracker.written) {
         combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
-      } else if (! combinedMutexes.containsKey(mutex)) {
+      } else {
         combinedMutexes.put(mutex, new LockModeAndState(LockMode.READ));
       }
+//      if (entry.getValue().read) {
+//        final var mutex = getMutex(entry.getKey());
+//        if (writes.contains(entry.getKey())) {
+//          combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
+//        } else if (!combinedMutexes.containsKey(mutex)) {
+//          combinedMutexes.put(mutex, new LockModeAndState(LockMode.READ));
+//        }
+//      }
     }
 
-    for (var write : writes) {
-      final var mutex = getMutex(write);
-      combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
-    }
+//    for (var write : writes) {
+//      final var mutex = getMutex(write);
+//      combinedMutexes.put(mutex, new LockModeAndState(LockMode.WRITE));
+//    }
 
     for (var mutexEntry : combinedMutexes.entrySet()) {
       final var mutex = mutexEntry.getKey();
@@ -212,26 +245,39 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       lockModeAndState.locked = true;
     }
 
-    for (var read : reads) {
-      final var storedValues = map.getStore().get(read);
-      final long storedValueVersion;
-      if (storedValues == null) {
-        storedValueVersion = readVersion;
+//    for (var read : reads) {
+//      final var storedValues = map.getStore().get(read);
+//      final long storedValueVersion;
+//      if (storedValues == null) {
+//        storedValueVersion = readVersion;
+//      } else {
+//        storedValueVersion = storedValues.getFirst().getVersion();
+//      }
+//
+//      if (storedValueVersion > readVersion) {
+//        rollbackFromCommitAttempt(combinedMutexes);
+//        throw new AntidependencyFailure("Read dependency breached for key " + read + "; expected version " + readVersion + ", saw " + storedValueVersion);
+//      }
+//    }
+    for (var entry : local.entrySet()) {
+      final var key = entry.getKey();
+      if (entry.getValue().read) {
+        final var storedValues = map.getStore().get(key);
+        final long storedValueVersion;
+        if (storedValues == null) {
+          storedValueVersion = readVersion;
+        } else {
+          storedValueVersion = storedValues.getFirst().getVersion();
+        }
+
+        if (storedValueVersion > readVersion) {
+          rollbackFromCommitAttempt(combinedMutexes);
+          throw new AntidependencyFailure("Read dependency breached for key " + key + "; expected version " + readVersion + ", saw " + storedValueVersion);
+        }
       } else {
-        storedValueVersion = storedValues.getFirst().getVersion();
-      }
-
-      if (storedValueVersion > readVersion) {
-        rollbackFromCommitAttempt(combinedMutexes);
-        throw new AntidependencyFailure("Read dependency breached for key " + read + "; expected version " + readVersion + ", saw " + storedValueVersion);
-      }
-    }
-
-    for (var stateEntry : itemStates.entrySet()) {
-      final var key = stateEntry.getKey();
-      if (writes.contains(key)) {
         final var existingValues = map.getStore().get(key);
-        switch (stateEntry.getValue()) {
+        final var itemState = itemStates.get(key);
+        switch (itemState) {
           case INSERTED -> {
             if (existingValues != null && existingValues.getFirst().hasValue()) {
               rollbackFromCommitAttempt(combinedMutexes);
@@ -254,21 +300,62 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       }
     }
 
+//    for (var stateEntry : itemStates.entrySet()) {
+//      final var key = stateEntry.getKey();
+//      if (writes.contains(key)) {
+//        final var existingValues = map.getStore().get(key);
+//        switch (stateEntry.getValue()) {
+//          case INSERTED -> {
+//            if (existingValues != null && existingValues.getFirst().hasValue()) {
+//              rollbackFromCommitAttempt(combinedMutexes);
+//              throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+//            }
+//          }
+//          case EXISTING -> {
+//            if (existingValues == null || !existingValues.getFirst().hasValue()) {
+//              rollbackFromCommitAttempt(combinedMutexes);
+//              throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+//            }
+//          }
+//          case DELETED -> {
+//            if (existingValues == null || !existingValues.getFirst().hasValue()) {
+//              rollbackFromCommitAttempt(combinedMutexes);
+//              throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+//            }
+//          }
+//        }
+//      }
+//    }
+
     synchronized (map.getContextLock()) {
       writeVersion = map.incrementAndGetVersion();
       map.getQueuedContexts().addLast(this);
     }
 
-    for (var write : writes) {
-      final var replacementValue = new RawVersioned(writeVersion, local.get(write).value);
-       map.getStore().compute(write, (__, previousValues) -> {
-         if (previousValues == null) {
-           return SrmlMap.wrapInDeque(replacementValue);
-         } else {
-           previousValues.addFirst(replacementValue);
-           return previousValues;
-         }
-      });
+//    for (var write : writes) {
+//      final var replacementValue = new RawVersioned(writeVersion, local.get(write).value);
+//       map.getStore().compute(write, (__, previousValues) -> {
+//         if (previousValues == null) {
+//           return SrmlMap.wrapInDeque(replacementValue);
+//         } else {
+//           previousValues.addFirst(replacementValue);
+//           return previousValues;
+//         }
+//      });
+//    }
+    for (var entry : local.entrySet()) {
+      final var tracker = entry.getValue();
+      if (tracker.written) {
+        final var replacementValue = new RawVersioned(writeVersion, tracker.value);
+        map.getStore().compute(entry.getKey(), (__, previousValues) -> {
+          if (previousValues == null) {
+            return SrmlMap.wrapInDeque(replacementValue);
+          } else {
+            previousValues.addFirst(replacementValue);
+            return previousValues;
+          }
+        });
+      }
     }
 
     releaseMutexes(combinedMutexes);
@@ -289,11 +376,21 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
           if (queuedContexts.remove(oldest)) {
             if (oldestState == State.COMMITTED) {
               highestVersionPurged = oldest.writeVersion;
-              for (var write : oldest.writes) {
-                final var values = map.getStore().get(write);
-                synchronized (values) {
-                  while (values.size() > queueDepth) {
-                    values.removeLast();
+//              for (var write : oldest.writes) {
+//                final var values = map.getStore().get(write);
+//                synchronized (values) {
+//                  while (values.size() > queueDepth) {
+//                    values.removeLast();
+//                  }
+//                }
+//              }
+              for (var entry : oldest.local.entrySet()) {
+                if (entry.getValue().written) {
+                  final var values = map.getStore().get(entry.getKey());
+                  synchronized (values) {
+                    while (values.size() > queueDepth) {
+                      values.removeLast();
+                    }
                   }
                 }
               }

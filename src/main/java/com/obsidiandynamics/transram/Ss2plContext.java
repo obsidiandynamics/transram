@@ -147,7 +147,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   }
 
   @Override
-  public void close() {
+  public void commit() {
     if (state != State.OPEN) {
       return;
     }
