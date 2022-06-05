@@ -87,7 +87,9 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   @Override
   public Set<K> keys(Predicate<K> predicate) throws MutexAcquisitionFailure {
     ensureOpen();
+    // doing an initial size() check acquires a lock on the size object, preventing further key insertions
     size();
+
     final var keys = new HashSet<K>();
     for (var entry : map.getStore().entrySet()) {
       final var key = entry.getKey();

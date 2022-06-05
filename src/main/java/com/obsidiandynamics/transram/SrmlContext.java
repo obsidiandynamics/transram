@@ -103,6 +103,8 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
         }
       }
     }
+
+    // a size() check at any point creates a dependency upon the size object, trapping insertion antidependencies
     size();
     return keys;
   }
