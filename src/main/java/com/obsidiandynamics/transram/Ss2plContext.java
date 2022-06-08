@@ -93,15 +93,18 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     final var keys = new HashSet<K>();
     for (var entry : map.getStore().entrySet()) {
       final var key = entry.getKey();
-      if (key instanceof KeyRef && predicate.test(Unsafe.cast(((KeyRef<?>) key).unwrap()))) {
-        final var tracker = local.get(key);
-        if (tracker != null) {
-          if (tracker.value != null) {
-            keys.add(Unsafe.cast(key));
-          }
-        } else {
-          if (entry.getValue().hasValue()) {
-            keys.add(Unsafe.cast(key));
+      if (key instanceof KeyRef) {
+        final var unwrapped = Unsafe.<K>cast(((KeyRef<?>) key).unwrap());
+        if (predicate.test(unwrapped)) {
+          final var tracker = local.get(key);
+          if (tracker != null) {
+            if (tracker.value != null) {
+              keys.add(unwrapped);
+            }
+          } else {
+            if (entry.getValue().hasValue()) {
+              keys.add(unwrapped);
+            }
           }
         }
       }

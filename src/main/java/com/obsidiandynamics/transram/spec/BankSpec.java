@@ -2,12 +2,13 @@ package com.obsidiandynamics.transram.spec;
 
 import com.obsidiandynamics.transram.*;
 import com.obsidiandynamics.transram.Enclose.Region.*;
+import com.obsidiandynamics.transram.spec.BankSpec.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 
-public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account> {
-  public static class BankOptions {
+public final class BankSpec implements Spec<State, Integer, Account> {
+  public static class Options {
     public int thinkTimeMs = -1;
     public int numAccounts;
     public int initialBalance;
@@ -24,15 +25,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
     }
   }
 
-  static final class BankState {
-    final TransMap<Integer, Account> map;
-
-    BankState(TransMap<Integer, Account> map) {
-      this.map = map;
-    }
-  }
-
-  private static final BankOptions DEF_OPTIONS = new BankOptions() {{
+  private static final Options DEF_OPTIONS = new Options() {{
     thinkTimeMs = 0;
     numAccounts = 1_000;
     initialBalance = 100;
@@ -47,16 +40,26 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
       {0.9, 0.0, 0.1, 0.0}
   };
 
-  final double[][] profiles;
+  static final class State {
+    final TransMap<Integer, Account> map;
 
-  final BankOptions options;
+    State(TransMap<Integer, Account> map) {
+      this.map = map;
+    }
+  }
+
+  final Options options;
+
+  final double[][] profiles;
 
   public BankSpec() {
     this(DEF_OPTIONS, DEF_PROFILES);
   }
 
-  public BankSpec(BankOptions options, double[][] profiles) {
-    this.options = options; this.profiles = profiles;
+  public BankSpec(Options options, double[][] profiles) {
+    options.validate();
+    this.options = options;
+    this.profiles = profiles;
   }
 
   @Override
@@ -70,7 +73,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
   }
 
   @Override
-  public BankState instantiate(TransMap<Integer, Account> map) {
+  public State instantiate(TransMap<Integer, Account> map) {
     // initialise bank accounts
     for (var i = 0; i < options.numAccounts; i++) {
       final var accountId = i;
@@ -83,13 +86,13 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
         return Action.COMMIT;
       });
     }
-    return new BankState(map);
+    return new State(map);
   }
 
   private enum Operation {
     SNAPSHOT_READ {
       @Override
-      void operate(BankState state, Failures failures, SplittableRandom rng, BankOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
           for (var i = 0; i < options.scanAccounts; i++) {
@@ -104,7 +107,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
 
     READ_ONLY {
       @Override
-      void operate(BankState state, Failures failures, SplittableRandom rng, BankOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
         Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
           for (var i = 0; i < options.scanAccounts; i++) {
@@ -119,7 +122,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
 
     XFER {
       @Override
-      void operate(BankState state, Failures failures, SplittableRandom rng, BankOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
           final var fromAccountId = (int) (rng.nextDouble() * options.numAccounts);
           final var toAccountId = (int) (rng.nextDouble() * options.numAccounts);
@@ -158,7 +161,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
 
     SPLIT_MERGE {
       @Override
-      void operate(BankState state, Failures failures, SplittableRandom rng, BankOptions options) {
+      void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
           final var accountAId = (int) (rng.nextDouble() * options.numAccounts);
           final var accountBId = (int) (rng.nextDouble() * options.numAccounts);
@@ -201,7 +204,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
       }
     };
 
-    abstract void operate(BankState state, Failures failures, SplittableRandom rng, BankOptions options);
+    abstract void operate(State state, Failures failures, SplittableRandom rng, Options options);
 
     private static void think(long time) {
       if (time > 0) {
@@ -215,12 +218,12 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
   }
 
   @Override
-  public void evaluate(int ordinal, BankState state, Failures failures, SplittableRandom rng) {
+  public void evaluate(int ordinal, State state, Failures failures, SplittableRandom rng) {
     Operation.values()[ordinal].operate(state, failures, rng, options);
   }
 
   @Override
-  public void verify(BankState state) {
+  public void verify(State state) {
     if (options.log) {
       dumpMap(state.map);
     }
@@ -234,7 +237,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
     }
   }
 
-  private static void checkMapSum(TransMap<?, Account> map, BankOptions options) {
+  private static void checkMapSum(TransMap<?, Account> map, Options options) {
     final var values = map.debug().dirtyView().values();
     final var sum = values.stream().filter(GenericVersioned::hasValue).map(GenericVersioned::getValue).mapToLong(Account::getBalance).sum();
     final var expectedSum = options.numAccounts * options.initialBalance;
@@ -243,7 +246,7 @@ public final class BankSpec implements Spec<BankSpec.BankState, Integer, Account
     Assert.that(min >= 0, () -> String.format("Minimum balance is %d", min));
   }
 
-  private static void checkMapSizeAndKeys(TransMap<Integer, Account> map, BankOptions options) {
+  private static void checkMapSizeAndKeys(TransMap<Integer, Account> map, Options options) {
     Enclose.over(map).transact(ctx -> {
       final var actualSize = ctx.size();
       Assert.that(actualSize <= options.numAccounts, () -> String.format("Number of accounts (%d) exceeds the maximum (%d)", actualSize, options.numAccounts));

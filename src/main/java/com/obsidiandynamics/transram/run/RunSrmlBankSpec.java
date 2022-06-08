@@ -4,7 +4,7 @@ import com.obsidiandynamics.transram.*;
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.spec.*;
 
-public class RunSrmlWorkload {
+public class RunSrmlBankSpec {
   public static void main(String[] args) throws InterruptedException {
     Harness.run(SrmlMap.factory(new SrmlMap.Options() {{
       mutexStripes = 1024;

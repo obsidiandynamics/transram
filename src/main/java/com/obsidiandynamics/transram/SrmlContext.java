@@ -83,23 +83,26 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     final var keys = new HashSet<K>();
     entryLoop: for (var entry : map.getStore().entrySet()) {
       final var key = entry.getKey();
-      if (key instanceof KeyRef && predicate.test(Unsafe.cast(((KeyRef<?>) key).unwrap()))) {
-        final var tracker = local.get(key);
-        if (tracker != null) {
-          if (tracker.value != null) {
-            keys.add(Unsafe.cast(key));
-          }
-        } else {
-          final var storedValues = entry.getValue();
-          for (var storedValue : storedValues) {
-            if (storedValue.getVersion() <= readVersion) {
-              if (storedValue.hasValue()) {
-                keys.add(Unsafe.cast(key));
-              }
-              continue entryLoop;
+      if (key instanceof KeyRef) {
+        final var unwrapped = Unsafe.<K>cast(((KeyRef<?>) key).unwrap());
+        if (predicate.test(unwrapped)) {
+          final var tracker = local.get(key);
+          if (tracker != null) {
+            if (tracker.value != null) {
+              keys.add(unwrapped);
             }
+          } else {
+            final var storedValues = entry.getValue();
+            for (var storedValue : storedValues) {
+              if (storedValue.getVersion() <= readVersion) {
+                if (storedValue.hasValue()) {
+                  keys.add(unwrapped);
+                }
+                continue entryLoop;
+              }
+            }
+            throw new BrokenSnapshotFailure("Unable to restore value for key " + key + " at version " + readVersion + ", current at " + storedValues.getFirst().getVersion());
           }
-          throw new BrokenSnapshotFailure("Unable to restore value for key " + key + " at version " + readVersion + ", current at " + storedValues.getFirst().getVersion());
         }
       }
     }

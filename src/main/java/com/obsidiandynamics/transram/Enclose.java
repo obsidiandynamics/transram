@@ -37,25 +37,34 @@ public final class Enclose<K, V extends DeepCloneable<V>> {
   }
 
   public static <K, V extends DeepCloneable<V>> void transact(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
-      while (true) {
+    var maxBackoffMillis = 0;
+    while (true) {
+      try {
+        final var ctx = map.transact();
+        final var outcome = region.perform(ctx);
+        switch (outcome) {
+          case ROLLBACK_AND_RESET:
+            if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
+            break;
+          case ROLLBACK:
+            if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
+            return;
+          case COMMIT:
+            if (ctx.getState() != State.COMMITTED) ctx.commit();
+            break;
+        }
+        break;
+      } catch (ConcurrentModeFailure concurrentModeFailure) {
+        onFailure.accept(concurrentModeFailure);
+        final var rnd = Math.random();
         try {
-          final var ctx = map.transact();
-          final var outcome = region.perform(ctx);
-          switch (outcome) {
-            case ROLLBACK_AND_RESET:
-              if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
-              break;
-            case ROLLBACK:
-              if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
-              return;
-            case COMMIT:
-              if (ctx.getState() != State.COMMITTED) ctx.commit();
-              break;
-          }
-          break;
-        } catch (ConcurrentModeFailure concurrentModeFailure) {
-          onFailure.accept(concurrentModeFailure);
+          //noinspection BusyWait
+          Thread.sleep((int) (rnd * maxBackoffMillis), (int) (rnd * 1_000_000));
+          maxBackoffMillis++;
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
         }
       }
+    }
   }
 }
