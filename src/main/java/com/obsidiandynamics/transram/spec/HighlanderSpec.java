@@ -12,16 +12,19 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
   public static class Options {
     public int numPrefixes;
     public int numSuffixes;
+    public int scanPrefixes;
 
     void validate() {
       Assert.that(numPrefixes > 0);
       Assert.that(numSuffixes > 0);
+      Assert.that(scanPrefixes > 0);
     }
   }
 
   private static final Options DEF_OPTIONS = new Options() {{
     numPrefixes = 100;
     numSuffixes = 10;
+    scanPrefixes = 10;
   }};
 
   public static final double[][] DEF_PROFILES = {
@@ -53,10 +56,18 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
   }
 
   private enum Operation {
-    SCAN {
+    SNAPSHOT_READ {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-
+        final var firstPrefix = (int) (rng.nextDouble() * options.numPrefixes);
+        Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
+          for (var i = 0; i < options.scanPrefixes; i++) {
+            final var prefix = (i + firstPrefix) % options.numPrefixes;
+            final var keys = ctx.keys(wherePrefixIs(prefix));
+            Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
+          }
+          return Action.ROLLBACK;
+        });
       }
     },
 
