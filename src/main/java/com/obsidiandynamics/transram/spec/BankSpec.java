@@ -1,7 +1,7 @@
 package com.obsidiandynamics.transram.spec;
 
 import com.obsidiandynamics.transram.*;
-import com.obsidiandynamics.transram.Enclose.Region.*;
+import com.obsidiandynamics.transram.Transact.Region.*;
 import com.obsidiandynamics.transram.spec.BankSpec.*;
 import com.obsidiandynamics.transram.util.*;
 
@@ -77,7 +77,7 @@ public final class BankSpec implements Spec<State, Integer, Account> {
     // initialise bank accounts
     for (var i = 0; i < options.numAccounts; i++) {
       final var accountId = i;
-      Enclose.over(map).transact(ctx -> {
+      Transact.over(map).run(ctx -> {
         Assert.that(ctx.size() == accountId);
         final var existingAccount = ctx.read(accountId);
         Assert.that(existingAccount == null, () -> String.format("Found existing account %d (%s)", accountId, existingAccount));
@@ -94,7 +94,7 @@ public final class BankSpec implements Spec<State, Integer, Account> {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
-        Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
+        Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           for (var i = 0; i < options.scanAccounts; i++) {
             final var accountId = i + firstAccountId;
             ctx.read(accountId % options.numAccounts);
@@ -109,7 +109,7 @@ public final class BankSpec implements Spec<State, Integer, Account> {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         final var firstAccountId = (int) (rng.nextDouble() * options.numAccounts);
-        Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
+        Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           for (var i = 0; i < options.scanAccounts; i++) {
             final var accountId = i + firstAccountId;
             ctx.read(accountId % options.numAccounts);
@@ -123,7 +123,7 @@ public final class BankSpec implements Spec<State, Integer, Account> {
     XFER {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
+        Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           final var fromAccountId = (int) (rng.nextDouble() * options.numAccounts);
           final var toAccountId = (int) (rng.nextDouble() * options.numAccounts);
           final var amount = 1 + (int) (rng.nextDouble() * (options.maxXferAmount - 1));
@@ -162,7 +162,7 @@ public final class BankSpec implements Spec<State, Integer, Account> {
     SPLIT_MERGE {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
+        Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           final var accountAId = (int) (rng.nextDouble() * options.numAccounts);
           final var accountBId = (int) (rng.nextDouble() * options.numAccounts);
           if (accountAId == accountBId) {
@@ -247,7 +247,7 @@ public final class BankSpec implements Spec<State, Integer, Account> {
   }
 
   private static void checkMapSizeAndKeys(TransMap<Integer, Account> map, Options options) {
-    Enclose.over(map).transact(ctx -> {
+    Transact.over(map).run(ctx -> {
       final var actualSize = ctx.size();
       Assert.that(actualSize <= options.numAccounts, () -> String.format("Number of accounts (%d) exceeds the maximum (%d)", actualSize, options.numAccounts));
 

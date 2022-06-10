@@ -4,7 +4,7 @@ import com.obsidiandynamics.transram.TransContext.*;
 
 import java.util.function.*;
 
-public final class Enclose<K, V extends DeepCloneable<V>> {
+public final class Transact<K, V extends DeepCloneable<V>> {
   public interface Region<K, V extends DeepCloneable<V>> {
     enum Action {
       ROLLBACK_AND_RESET,
@@ -19,24 +19,24 @@ public final class Enclose<K, V extends DeepCloneable<V>> {
 
   private Consumer<ConcurrentModeFailure> onFailure = __ -> {};
 
-  private Enclose(TransMap<K, V> map) {
+  private Transact(TransMap<K, V> map) {
     this.map = map;
   }
 
-  public Enclose<K, V> onFailure(Consumer<ConcurrentModeFailure> onFailure) {
+  public Transact<K, V> withFailureHandler(Consumer<ConcurrentModeFailure> onFailure) {
     this.onFailure = onFailure;
     return this;
   }
 
-  public void transact(Region<K, V> region) {
-    transact(map, region, onFailure);
+  public void run(Region<K, V> region) {
+    run(map, region, onFailure);
   }
 
-  public static <K, V extends DeepCloneable<V>> Enclose<K, V> over(TransMap<K, V> map) {
-    return new Enclose<>(map);
+  public static <K, V extends DeepCloneable<V>> Transact<K, V> over(TransMap<K, V> map) {
+    return new Transact<>(map);
   }
 
-  public static <K, V extends DeepCloneable<V>> void transact(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
+  public static <K, V extends DeepCloneable<V>> void run(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
     var maxBackoffMillis = 0;
     while (true) {
       try {

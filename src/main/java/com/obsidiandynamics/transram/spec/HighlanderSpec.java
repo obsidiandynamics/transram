@@ -1,7 +1,7 @@
 package com.obsidiandynamics.transram.spec;
 
 import com.obsidiandynamics.transram.*;
-import com.obsidiandynamics.transram.Enclose.Region.*;
+import com.obsidiandynamics.transram.Transact.Region.*;
 import com.obsidiandynamics.transram.spec.HighlanderSpec.*;
 import com.obsidiandynamics.transram.util.*;
 
@@ -60,7 +60,7 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         final var firstPrefix = (int) (rng.nextDouble() * options.numPrefixes);
-        Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
+        Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           for (var i = 0; i < options.scanPrefixes; i++) {
             final var prefix = (i + firstPrefix) % options.numPrefixes;
             final var keys = ctx.keys(wherePrefixIs(prefix));
@@ -75,7 +75,7 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
         final var prefix = (int) (rng.nextDouble() * options.numPrefixes);
-        Enclose.over(state.map).onFailure(failures::increment).transact(ctx -> {
+        Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           final var keys = ctx.keys(wherePrefixIs(prefix));
           Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
 
@@ -115,7 +115,7 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
 
   @Override
   public void verify(State state) {
-    Enclose.over(state.map).transact(ctx -> {
+    Transact.over(state.map).run(ctx -> {
       var liveKeys = 0;
       for (var prefix = 0; prefix < options.numPrefixes; prefix++) {
         final var keys = ctx.keys(wherePrefixIs(prefix));
