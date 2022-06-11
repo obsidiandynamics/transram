@@ -1,30 +1,31 @@
 package com.obsidiandynamics.transram.spec;
 
-import com.obsidiandynamics.transram.*;
-import com.obsidiandynamics.transram.Transact.Region.*;
-import com.obsidiandynamics.transram.spec.HighlanderSpec.*;
-import com.obsidiandynamics.transram.util.*;
+import com.obsidiandynamics.transram.TransMap;
+import com.obsidiandynamics.transram.Transact;
+import com.obsidiandynamics.transram.Transact.Region.Action;
+import com.obsidiandynamics.transram.spec.HospitalSpec.State;
+import com.obsidiandynamics.transram.util.Assert;
 
-import java.util.*;
-import java.util.function.*;
+import java.util.Arrays;
+import java.util.SplittableRandom;
 
-public final class HighlanderSpec implements Spec<State, BiKey, Void> {
+public final class HospitalSpec implements Spec<State, BiKey, Void> {
   public static class Options {
-    public int numPrefixes;
-    public int numSuffixes;
-    public int scanPrefixes;
+    public int numHospitals;
+    public int numDocsPerHospital;
+    public int scanHospitals;
 
     void validate() {
-      Assert.that(numPrefixes > 0);
-      Assert.that(numSuffixes > 0);
-      Assert.that(scanPrefixes > 0);
+      Assert.that(numHospitals > 0);
+      Assert.that(numDocsPerHospital > 0);
+      Assert.that(scanHospitals > 0);
     }
   }
 
   private static final Options DEF_OPTIONS = new Options() {{
-    numPrefixes = 100;
-    numSuffixes = 10;
-    scanPrefixes = 10;
+    numHospitals = 100;
+    numDocsPerHospital = 10;
+    scanHospitals = 10;
   }};
 
   public static final double[][] DEF_PROFILES = {
@@ -45,11 +46,11 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
 
   private final double[][] profiles;
 
-  public HighlanderSpec() {
+  public HospitalSpec() {
     this(DEF_OPTIONS, DEF_PROFILES);
   }
 
-  public HighlanderSpec(Options options, double[][] profiles) {
+  public HospitalSpec(Options options, double[][] profiles) {
     options.validate();
     this.options = options;
     this.profiles = profiles;
@@ -59,10 +60,10 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
     SNAPSHOT_READ {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        final var firstPrefix = (int) (rng.nextDouble() * options.numPrefixes);
+        final var firstPrefix = (int) (rng.nextDouble() * options.numHospitals);
         Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
-          for (var i = 0; i < options.scanPrefixes; i++) {
-            final var prefix = (i + firstPrefix) % options.numPrefixes;
+          for (var i = 0; i < options.scanHospitals; i++) {
+            final var prefix = (i + firstPrefix) % options.numHospitals;
             final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
             Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
           }
@@ -74,13 +75,13 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
     INS_DEL {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        final var prefix = (int) (rng.nextDouble() * options.numPrefixes);
+        final var prefix = (int) (rng.nextDouble() * options.numHospitals);
         Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
           Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
 
           if (keys.isEmpty()) {
-            final var suffix = (int) (rng.nextDouble() * options.numSuffixes);
+            final var suffix = (int) (rng.nextDouble() * options.numDocsPerHospital);
             ctx.insert(new BiKey(prefix, suffix), Void.instance());
           } else {
             final var key = keys.iterator().next();
@@ -113,7 +114,7 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
   public void verify(State state) {
     Transact.over(state.map).run(ctx -> {
       var liveKeys = 0;
-      for (var prefix = 0; prefix < options.numPrefixes; prefix++) {
+      for (var prefix = 0; prefix < options.numHospitals; prefix++) {
         final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
         liveKeys += keys.size();
         final var _prefix = prefix;
