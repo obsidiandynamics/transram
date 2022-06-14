@@ -1,17 +1,28 @@
 package com.obsidiandynamics.transram.spec;
 
-public final class Doctor {
-  private boolean onHoliday;
+import com.obsidiandynamics.transram.*;
 
-  public boolean isOnHoliday() {
-    return onHoliday;
+public final class Doctor implements DeepCloneable<Doctor> {
+  private boolean rostered;
+
+  public Doctor(boolean rostered) {
+    this.rostered = rostered;
   }
 
-  public void setOnHoliday(boolean onHoliday) {
-    this.onHoliday = onHoliday;
+  public boolean isRostered() {
+    return rostered;
+  }
+
+  public void setRostered(boolean rostered) {
+    this.rostered = rostered;
   }
 
   public String toString() {
-    return Doctor.class.getSimpleName() + "[onHoliday=" + onHoliday + ']';
+    return Doctor.class.getSimpleName() + "[rostered=" + rostered + ']';
+  }
+
+  @Override
+  public Doctor deepClone() {
+    return new Doctor(rostered);
   }
 }

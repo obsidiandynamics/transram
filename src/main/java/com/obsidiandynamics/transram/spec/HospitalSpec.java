@@ -1,15 +1,13 @@
 package com.obsidiandynamics.transram.spec;
 
-import com.obsidiandynamics.transram.TransMap;
-import com.obsidiandynamics.transram.Transact;
-import com.obsidiandynamics.transram.Transact.Region.Action;
-import com.obsidiandynamics.transram.spec.HospitalSpec.State;
-import com.obsidiandynamics.transram.util.Assert;
+import com.obsidiandynamics.transram.*;
+import com.obsidiandynamics.transram.Transact.Region.*;
+import com.obsidiandynamics.transram.spec.HospitalSpec.*;
+import com.obsidiandynamics.transram.util.*;
 
-import java.util.Arrays;
-import java.util.SplittableRandom;
+import java.util.*;
 
-public final class HospitalSpec implements Spec<State, BiKey, Void> {
+public final class HospitalSpec implements Spec<State, BiKey, Doctor> {
   public static class Options {
     public int numHospitals;
     public int numDocsPerHospital;
@@ -29,15 +27,16 @@ public final class HospitalSpec implements Spec<State, BiKey, Void> {
   }};
 
   public static final double[][] DEF_PROFILES = {
+      {0.0, 1.0},
       {0.1, 0.9},
       {0.5, 0.5},
       {0.9, 0.1}
   };
 
   static final class State {
-    final TransMap<BiKey, Void> map;
+    final TransMap<BiKey, Doctor> map;
 
-    State(TransMap<BiKey, Void> map) {
+    State(TransMap<BiKey, Doctor> map) {
       this.map = map;
     }
   }
@@ -60,33 +59,46 @@ public final class HospitalSpec implements Spec<State, BiKey, Void> {
     SNAPSHOT_READ {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        final var firstPrefix = (int) (rng.nextDouble() * options.numHospitals);
+        final var firstHospitalId = (int) (rng.nextDouble() * options.numHospitals);
         Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           for (var i = 0; i < options.scanHospitals; i++) {
-            final var prefix = (i + firstPrefix) % options.numHospitals;
-            final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
-            Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
+            final var hospitalId = (i + firstHospitalId) % options.numHospitals;
+            final var keys = ctx.keys(BiKey.whereFirstIs(hospitalId));
+            Assert.that(keys.size() == options.numDocsPerHospital, () -> String.format("Incorrect number of keys for hospital %d: %d", hospitalId, keys.size()));
           }
           return Action.ROLLBACK;
         });
       }
     },
 
-    INS_DEL {
+    CHANGE_ROSTER {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        final var prefix = (int) (rng.nextDouble() * options.numHospitals);
+        final var hospitalId = (int) (rng.nextDouble() * options.numHospitals);
         Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
-          final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
-          Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
-
-          if (keys.isEmpty()) {
-            final var suffix = (int) (rng.nextDouble() * options.numDocsPerHospital);
-            ctx.insert(new BiKey(prefix, suffix), Void.instance());
-          } else {
-            final var key = keys.iterator().next();
-            ctx.delete(key);
+          // pick a random doctor and check if he's rostered
+          final var doctorId1 = (int) (rng.nextDouble() * options.numDocsPerHospital);
+          final var doctor1Key = new BiKey(hospitalId, doctorId1);
+          final var doctor1 = ctx.read(doctor1Key);
+          if (!doctor1.isRostered()) {
+            doctor1.setRostered(true);
+            return Action.COMMIT;
           }
+
+          // continue with a 2nd doctor only if the 1st was rostered
+
+          // pick another doctor id that differs from the doctor that was just checked
+          var doctorId2 = doctorId1;
+          do  {
+            doctorId2 = (int) (rng.nextDouble() * options.numDocsPerHospital);
+          } while (doctorId2 == doctorId1);
+
+          // change the 2nd doctor's roster status
+          final var doctor2Key = new BiKey(hospitalId, doctorId2);
+          final var doctor2 = ctx.read(doctor2Key);
+          doctor2.setRostered(!doctor2.isRostered());
+          ctx.update(doctor2Key, doctor2);
+
           return Action.COMMIT;
         });
       }
@@ -106,23 +118,39 @@ public final class HospitalSpec implements Spec<State, BiKey, Void> {
   }
 
   @Override
-  public State instantiate(TransMap<BiKey, Void> map) {
-    return new State(map);
+  public State instantiate(TransMap<BiKey, Doctor> map) {
+    final var state = new State(map);
+    Transact.over(state.map).run(ctx -> {
+      for (var hospitalId = 0; hospitalId < options.numHospitals; hospitalId++) {
+        for (var doctorId = 0; doctorId < options.numDocsPerHospital; doctorId++) {
+          ctx.insert(new BiKey(hospitalId, doctorId), new Doctor(true));
+        }
+      }
+      return Action.COMMIT;
+    });
+    return state;
   }
 
   @Override
   public void verify(State state) {
     Transact.over(state.map).run(ctx -> {
       var liveKeys = 0;
-      for (var prefix = 0; prefix < options.numHospitals; prefix++) {
-        final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
+      for (var hospitalId = 0; hospitalId < options.numHospitals; hospitalId++) {
+        final var keys = ctx.keys(BiKey.whereFirstIs(hospitalId));
         liveKeys += keys.size();
-        final var _prefix = prefix;
-        Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", _prefix, keys.size()));
+        final var _hospitalId = hospitalId;
+        Assert.that(keys.size() == options.numDocsPerHospital, () -> String.format("Incorrect number of keys for hospital %d: %d", _hospitalId, keys.size()));
+        var numRostered = 0;
         for (var key : keys) {
-          final var value = ctx.read(key);
-          Assert.that(value != null, () -> "Null value for key " + key);
+          final var doctor = ctx.read(key);
+          Assert.that(doctor != null, () -> "Null value for key " + key);
+          if (doctor.isRostered()) {
+            numRostered++;
+          }
         }
+
+        final var _numRostered = numRostered;
+        Assert.that(_numRostered >= 1, () -> String.format("Too few rostered doctors for hospital %d: %d", _hospitalId, _numRostered));
       }
 
       final var size = ctx.size();
@@ -131,6 +159,7 @@ public final class HospitalSpec implements Spec<State, BiKey, Void> {
 
       return Action.ROLLBACK;
     });
+    //Diagnostics.dumpMap(state.map);
   }
 
   @Override

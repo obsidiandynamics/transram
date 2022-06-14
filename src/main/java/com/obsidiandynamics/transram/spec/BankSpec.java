@@ -225,16 +225,10 @@ public final class BankSpec implements Spec<State, Integer, Account> {
   @Override
   public void verify(State state) {
     if (options.log) {
-      dumpMap(state.map);
+      Diagnostics.dumpMap(state.map);
     }
     checkMapSum(state.map, options);
     checkMapSizeAndKeys(state.map, options);
-  }
-
-  private static void dumpMap(TransMap<?, ?> map) {
-    for (var entry : map.debug().dirtyView().entrySet()) {
-      System.out.format("%10s:%s\n", entry.getKey(), entry.getValue());
-    }
   }
 
   private static void checkMapSum(TransMap<?, Account> map, Options options) {
