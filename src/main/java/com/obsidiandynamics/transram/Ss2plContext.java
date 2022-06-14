@@ -285,7 +285,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   @Override
   public long getVersion() {
-    if (state != State.OPEN) {
+    if (state != State.COMMITTED) {
       throw new IllegalStateException("Transaction is not committed");
     }
     return version;

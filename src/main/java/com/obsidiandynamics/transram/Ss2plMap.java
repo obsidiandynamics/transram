@@ -62,6 +62,11 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
     public int numRefs() {
       return store.size();
     }
+
+    @Override
+    public long getVersion() {
+      return version.get();
+    }
   };
 
   @Override

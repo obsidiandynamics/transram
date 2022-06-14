@@ -401,7 +401,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   @Override
   public long getVersion() {
-    if (state.get() != State.OPEN) {
+    if (state.get() != State.COMMITTED) {
       throw new IllegalStateException("Transaction is not committed");
     }
     return writeVersion;

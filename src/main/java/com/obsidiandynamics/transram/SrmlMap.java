@@ -74,6 +74,11 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
     public int numRefs() {
       return store.values().stream().mapToInt(Deque::size).sum();
     }
+
+    @Override
+    public long getVersion() {
+      return version;
+    }
   };
 
   @Override
