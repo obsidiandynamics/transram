@@ -91,6 +91,8 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     size();
 
     final var keys = new HashSet<K>();
+
+    // start by checking upstream keys
     for (var entry : map.getStore().entrySet()) {
       final var key = entry.getKey();
       if (key instanceof KeyRef) {
@@ -106,6 +108,17 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
               keys.add(unwrapped);
             }
           }
+        }
+      }
+    }
+
+    // include locally staged keys that weren't present upstream
+    for (var entry : local.entrySet()) {
+      final var key = entry.getKey();
+      if (key instanceof KeyRef) {
+        final var unwrapped = Unsafe.<K>cast(((KeyRef<?>) key).unwrap());
+        if (entry.getValue().value != null && !keys.contains(unwrapped) && predicate.test(unwrapped)) {
+          keys.add(unwrapped);
         }
       }
     }

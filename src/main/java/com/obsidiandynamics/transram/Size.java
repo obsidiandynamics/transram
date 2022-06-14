@@ -1,17 +1,17 @@
 package com.obsidiandynamics.transram;
 
-public final class Size implements DeepCloneable<Size> {
+final class Size implements DeepCloneable<Size> {
   private int value;
 
-  public Size(int value) {
+  Size(int value) {
     this.value = value;
   }
 
-  public int get() {
+  int get() {
     return value;
   }
 
-  public void set(int value) {
+  void set(int value) {
     this.value = value;
   }
 

@@ -11,10 +11,6 @@ class SrmlContextTest {
     return new SrmlMap<>(new Options());
   }
 
-  private static <K, V extends DeepCloneable<V>> TransMap<K, V> newMap(Class<K> keyClass, Class<V> valueClass) {
-    return SrmlContextTest.newMap();
-  }
-
   @Nested
   class BasicTests {
     @Test
@@ -23,6 +19,7 @@ class SrmlContextTest {
       final var ctx = map.transact();
       assertThat(ctx.size()).isEqualTo(0);
       assertThat(ctx.keys(__ -> true)).isEmpty();
+      assertThat(ctx.read(0)).isNull();
     }
 
     @Test
@@ -45,31 +42,44 @@ class SrmlContextTest {
       assertThat(ctx.getState()).isEqualTo(State.OPEN);
       ctx.rollback();
       assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
-      assertThat(catchThrowable(ctx::getVersion)).isInstanceOf(IllegalStateException.class);
+      assertThat(catchThrowable(ctx::getVersion)).isExactlyInstanceOf(TransactionNotCommittedException.class);
       assertThat(map.debug().getVersion()).isEqualTo(0);
     }
 
     @Test
-    void testCommitOrRollbackAfterCommit() throws ConcurrentModeFailure {
-      final var map = newMap();
+    void testOperationsAfterCommit() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
       final var ctx = map.transact();
       ctx.commit();
-      assertThat(catchThrowable(ctx::commit)).isInstanceOf(IllegalStateException.class);
-      assertThat(catchThrowable(ctx::rollback)).isInstanceOf(IllegalStateException.class);
+      assertThat(catchThrowable(ctx::commit)).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(ctx::rollback)).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.read(0))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.insert(0, Nil.instance()))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.update(0, Nil.instance()))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.delete(0))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(ctx::size)).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.keys(__ -> true))).isExactlyInstanceOf(TransactionNotOpenException.class);
     }
 
     @Test
     void testCommitOrRollbackAfterRollback() throws ConcurrentModeFailure {
-      final var map = newMap();
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
       final var ctx = map.transact();
       ctx.rollback();
-      assertThat(catchThrowable(ctx::commit)).isInstanceOf(IllegalStateException.class);
-      assertThat(catchThrowable(ctx::rollback)).isInstanceOf(IllegalStateException.class);
+      assertThat(catchThrowable(ctx::commit)).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(ctx::rollback)).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.read(0))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.insert(0, Nil.instance()))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.update(0, Nil.instance()))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.delete(0))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(ctx::size)).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(() -> ctx.keys(__ -> true))).isExactlyInstanceOf(TransactionNotOpenException.class);
+      assertThat(catchThrowable(ctx::getVersion)).isExactlyInstanceOf(TransactionNotCommittedException.class);
     }
 
     @Test
     void noChangeAfterRollback() throws ConcurrentModeFailure {
-      final var map = newMap(Integer.class, StringBox.class);
+      final var map = SrmlContextTest.<Integer, StringBox>newMap();
       {
         final var ctx = map.transact();
         ctx.insert(0, StringBox.of("zero_v0"));
@@ -88,6 +98,7 @@ class SrmlContextTest {
         ctx.insert(3, StringBox.of("three_v0"));
         assertThat(ctx.read(3)).isEqualTo(StringBox.of("three_v0"));
         assertThat(ctx.size()).isEqualTo(3);
+        assertThat(ctx.keys(__ -> true)).containsExactly(0, 2, 3);
         ctx.rollback();
         assertThat(map.debug().getVersion()).isEqualTo(1);
       }
@@ -107,7 +118,7 @@ class SrmlContextTest {
   class LifecycleTests {
     @Test
     void testInsertThenUpdateThenDeleteOfNonExistent() throws ConcurrentModeFailure {
-      final var map = newMap(Integer.class, StringBox.class);
+      final var map = SrmlContextTest.<Integer, StringBox>newMap();
       {
         final var ctx = map.transact();
         ctx.insert(0, StringBox.of("zero_v1"));
@@ -137,7 +148,7 @@ class SrmlContextTest {
 
     @Test
     void testDeleteThenInsertOfExisting() throws ConcurrentModeFailure {
-      final var map = newMap(Integer.class, StringBox.class);
+      final var map = SrmlContextTest.<Integer, StringBox>newMap();
       {
         final var ctx = map.transact();
         ctx.insert(0, StringBox.of("zero_v1"));
@@ -168,7 +179,7 @@ class SrmlContextTest {
 
     @Test
     void testInsertOfExisting() {
-      final var map = newMap(Integer.class, StringBox.class);
+      final var map = SrmlContextTest.<Integer, StringBox>newMap();
     }
   }
 

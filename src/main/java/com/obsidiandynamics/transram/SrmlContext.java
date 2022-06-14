@@ -80,6 +80,8 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   public Set<K> keys(Predicate<K> predicate) throws BrokenSnapshotFailure {
     ensureOpen();
     final var keys = new HashSet<K>();
+
+    // start by checking upstream keys
     entryLoop: for (var entry : map.getStore().entrySet()) {
       final var key = entry.getKey();
       if (key instanceof KeyRef) {
@@ -108,6 +110,17 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
     // a size() check at any point creates a dependency upon the size object, trapping insertion antidependencies
     size();
+
+    // include locally staged keys that weren't present upstream
+    for (var entry : local.entrySet()) {
+      final var key = entry.getKey();
+      if (key instanceof KeyRef) {
+        final var unwrapped = Unsafe.<K>cast(((KeyRef<?>) key).unwrap());
+        if (entry.getValue().value != null && !keys.contains(unwrapped) && predicate.test(unwrapped)) {
+          keys.add(unwrapped);
+        }
+      }
+    }
     return keys;
   }
 
@@ -198,7 +211,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private void ensureOpen() {
     if (state.get() != State.OPEN) {
-      throw new IllegalStateException("Transaction is not open");
+      throw new TransactionNotOpenException();
     }
   }
 
@@ -402,7 +415,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   @Override
   public long getVersion() {
     if (state.get() != State.COMMITTED) {
-      throw new IllegalStateException("Transaction is not committed");
+      throw new TransactionNotCommittedException();
     }
     return writeVersion;
   }

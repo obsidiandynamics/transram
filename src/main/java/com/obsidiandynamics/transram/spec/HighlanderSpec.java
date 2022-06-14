@@ -7,7 +7,7 @@ import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
 
-public final class HighlanderSpec implements Spec<State, BiKey, Void> {
+public final class HighlanderSpec implements Spec<State, BiKey, Nil> {
   public static class Options {
     public int numHighlanders;
     public int numClonesPerHighlander;
@@ -33,9 +33,9 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
   };
 
   static final class State {
-    final TransMap<BiKey, Void> map;
+    final TransMap<BiKey, Nil> map;
 
-    State(TransMap<BiKey, Void> map) {
+    State(TransMap<BiKey, Nil> map) {
       this.map = map;
     }
   }
@@ -80,7 +80,7 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
 
           if (keys.isEmpty()) {
             final var cloneId = (int) (rng.nextDouble() * options.numClonesPerHighlander);
-            ctx.insert(new BiKey(highlanderId, cloneId), Void.instance());
+            ctx.insert(new BiKey(highlanderId, cloneId), Nil.instance());
           } else {
             final var key = keys.iterator().next();
             ctx.delete(key);
@@ -104,7 +104,7 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
   }
 
   @Override
-  public State instantiate(TransMap<BiKey, Void> map) {
+  public State instantiate(TransMap<BiKey, Nil> map) {
     return new State(map);
   }
 

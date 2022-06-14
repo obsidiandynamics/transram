@@ -1,13 +1,13 @@
 package com.obsidiandynamics.transram;
 
-public final class KeyRef<K> implements Key {
+final class KeyRef<K> implements Key {
   private final K key;
 
   KeyRef(K key) {
     this.key = key;
   }
 
-  public K unwrap() {
+  K unwrap() {
     return key;
   }
 
