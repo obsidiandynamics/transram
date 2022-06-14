@@ -13,8 +13,8 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private final Map<Key, Tracker> local = new HashMap<>();
 
-  private enum ItemState {
-    INSERTED, EXISTING, DELETED
+  private enum StateChange {
+    INSERTED, UNCHANGED, DELETED
   }
 
   private static final class Tracker {
@@ -24,13 +24,13 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
     boolean written;
 
-    ItemState state;
+    StateChange change;
 
-    Tracker(DeepCloneable<?> value, boolean read, boolean written, ItemState state) {
+    Tracker(DeepCloneable<?> value, boolean read, boolean written, StateChange change) {
       this.value = value;
       this.read = read;
       this.written = written;
-      this.state = state;
+      this.change = change;
     }
   }
 
@@ -61,14 +61,13 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
     final var storedValues = map.getStore().get(key);
     if (storedValues == null) {
-      local.put(key, new Tracker(null, true, false, ItemState.DELETED));
+      local.put(key, new Tracker(null, true, false, StateChange.UNCHANGED));
       return null;
     } else {
       for (var storedValue : storedValues) {
         if (storedValue.getVersion() <= readVersion) {
           final var clonedValue = DeepCloneable.clone(Unsafe.cast(storedValue.getValue()));
-          final var itemState = clonedValue != null ? ItemState.EXISTING : ItemState.DELETED;
-          local.put(key, new Tracker(clonedValue, true, false, itemState));
+          local.put(key, new Tracker(clonedValue, true, false, StateChange.UNCHANGED));
           return clonedValue;
         }
       }
@@ -115,49 +114,64 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   @Override
   public void insert(K key, V value) throws BrokenSnapshotFailure {
     Assert.that(value != null, () -> "Cannot insert null value");
-    write(Key.wrap(key), value, ItemState.INSERTED);
+    write(Key.wrap(key), value, StateChange.INSERTED);
     alterSize(1);
   }
 
   @Override
   public void update(K key, V value) {
     Assert.that(value != null, () -> "Cannot update null value");
-    write(Key.wrap(key), value, ItemState.EXISTING);
+    write(Key.wrap(key), value, StateChange.UNCHANGED);
   }
 
   @Override
   public void delete(K key) throws BrokenSnapshotFailure {
-    write(Key.wrap(key), null, ItemState.DELETED);
+    write(Key.wrap(key), null, StateChange.DELETED);
     alterSize(-1);
   }
 
-  private void write(Key key, DeepCloneable<?> value, ItemState state) {
+  private void write(Key key, DeepCloneable<?> value, StateChange change) {
     ensureOpen();
     local.compute(key, (__, existing) -> {
       if (existing != null) {
-        switch (state) {
+        switch (change) {
           case INSERTED -> {
-            if (existing.state == ItemState.EXISTING) {
+            if (existing.value != null) {
               throw new IllegalStateException("Cannot insert an existing item for key " + key);
             }
+            switch (existing.change) {
+              case UNCHANGED -> {
+                existing.change = StateChange.INSERTED;
+              }
+              case DELETED -> {
+                existing.change = StateChange.UNCHANGED;
+              }
+            }
           }
-          case EXISTING -> {
-            if (existing.state == ItemState.DELETED) {
-              throw new IllegalStateException("Cannot update a deleted item for key " + key);
+          case UNCHANGED -> {
+            if (existing.value == null) {
+              throw new IllegalStateException("Cannot update a non-existent item for key " + key);
             }
           }
           case DELETED -> {
-            if (existing.state == ItemState.DELETED) {
+            if (existing.value == null) {
               throw new IllegalStateException("Cannot delete a non-existent item for key " + key);
+            }
+            switch (existing.change) {
+              case INSERTED -> {
+                existing.change = StateChange.UNCHANGED;
+              }
+              case UNCHANGED -> {
+                existing.change = StateChange.DELETED;
+              }
             }
           }
         }
         existing.value = value;
         existing.written = true;
-        existing.state = state;
         return existing;
       } else {
-        return new Tracker(value, false, true, state);
+        return new Tracker(value, false, true, change);
       }
     });
   }
@@ -166,7 +180,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     final var size = (Size) read(InternalKey.SIZE);
     Assert.that(size != null, () -> "No size object");
     size.set(size.get() + sizeChange);
-    write(InternalKey.SIZE, size, ItemState.EXISTING);
+    write(InternalKey.SIZE, size, StateChange.UNCHANGED);
   }
 
   @Override
@@ -260,17 +274,22 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
       if (tracker.written) {
         final var existingValues = map.getStore().get(key);
-        switch (entry.getValue().state) {
+        switch (entry.getValue().change) {
           case INSERTED -> {
             if (existingValues != null && existingValues.getFirst().hasValue()) {
               rollbackFromCommitAttempt(combinedMutexes);
               throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
             }
           }
-          case EXISTING -> {
-            if (existingValues == null || !existingValues.getFirst().hasValue()) {
+          case UNCHANGED -> {
+            final var existsUpstream = existingValues != null && existingValues.getFirst().hasValue();
+            if (entry.getValue().value != null && !existsUpstream) {
               rollbackFromCommitAttempt(combinedMutexes);
               throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+            }
+            if (entry.getValue().value == null && existsUpstream) {
+              rollbackFromCommitAttempt(combinedMutexes);
+              throw new LifecycleFailure("Attempting to insert-delete an existent item for key " + key);
             }
           }
           case DELETED -> {

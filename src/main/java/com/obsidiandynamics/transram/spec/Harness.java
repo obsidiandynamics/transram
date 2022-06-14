@@ -39,7 +39,7 @@ public final class Harness {
     final var executor = Executors.newFixedThreadPool(THREADS);
     try {
       final var warmupMap = mapFactory.<K, V>instantiate();
-      System.out.format("Running benchmarks for %s...\n", warmupMap.getClass().getSimpleName());
+      System.out.format("Running %s benchmark for %s...\n", spec.getClass().getSimpleName(), warmupMap.getClass().getSimpleName());
       System.out.format("- Warmup...\n");
       final var operationNames = spec.getOperationNames();
       final var warmupProfile = divideUnitProbs(operationNames.length);

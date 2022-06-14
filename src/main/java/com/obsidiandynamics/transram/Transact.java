@@ -1,6 +1,7 @@
 package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.TransContext.*;
+import com.obsidiandynamics.transram.Transact.Region.*;
 
 import java.util.function.*;
 
@@ -36,7 +37,7 @@ public final class Transact<K, V extends DeepCloneable<V>> {
     return new Transact<>(map);
   }
 
-  public static <K, V extends DeepCloneable<V>> void run(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
+  public static <K, V extends DeepCloneable<V>> Action run(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
     var maxBackoffMillis = 0;
     while (true) {
       try {
@@ -48,12 +49,11 @@ public final class Transact<K, V extends DeepCloneable<V>> {
             break;
           case ROLLBACK:
             if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
-            return;
+            return Action.ROLLBACK;
           case COMMIT:
             if (ctx.getState() != State.COMMITTED) ctx.commit();
-            break;
+            return Action.COMMIT;
         }
-        break;
       } catch (ConcurrentModeFailure concurrentModeFailure) {
         onFailure.accept(concurrentModeFailure);
         final var rnd = Math.random();
