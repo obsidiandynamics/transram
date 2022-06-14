@@ -6,24 +6,23 @@ import com.obsidiandynamics.transram.spec.HighlanderSpec.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
-import java.util.function.*;
 
 public final class HighlanderSpec implements Spec<State, BiKey, Void> {
   public static class Options {
-    public int numPrefixes;
-    public int numSuffixes;
+    public int numHighlanders;
+    public int numClonesPerHighlander;
     public int scanPrefixes;
 
     void validate() {
-      Assert.that(numPrefixes > 0);
-      Assert.that(numSuffixes > 0);
+      Assert.that(numHighlanders > 0);
+      Assert.that(numClonesPerHighlander > 0);
       Assert.that(scanPrefixes > 0);
     }
   }
 
   private static final Options DEF_OPTIONS = new Options() {{
-    numPrefixes = 100;
-    numSuffixes = 10;
+    numHighlanders = 100;
+    numClonesPerHighlander = 10;
     scanPrefixes = 10;
   }};
 
@@ -59,12 +58,12 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
     SNAPSHOT_READ {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        final var firstPrefix = (int) (rng.nextDouble() * options.numPrefixes);
+        final var firstHighlanderId = (int) (rng.nextDouble() * options.numHighlanders);
         Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
           for (var i = 0; i < options.scanPrefixes; i++) {
-            final var prefix = (i + firstPrefix) % options.numPrefixes;
-            final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
-            Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
+            final var highlanderId = (i + firstHighlanderId) % options.numHighlanders;
+            final var keys = ctx.keys(BiKey.whereFirstIs(highlanderId));
+            Assert.that(keys.size() <= 1, () -> String.format("Too many keys for highlander %d: %d", highlanderId, keys.size()));
           }
           return Action.ROLLBACK;
         });
@@ -74,14 +73,14 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
     INS_DEL {
       @Override
       void operate(State state, Failures failures, SplittableRandom rng, Options options) {
-        final var prefix = (int) (rng.nextDouble() * options.numPrefixes);
+        final var highlanderId = (int) (rng.nextDouble() * options.numHighlanders);
         Transact.over(state.map).withFailureHandler(failures::increment).run(ctx -> {
-          final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
-          Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", prefix, keys.size()));
+          final var keys = ctx.keys(BiKey.whereFirstIs(highlanderId));
+          Assert.that(keys.size() <= 1, () -> String.format("Too many keys for highlander %d: %d", highlanderId, keys.size()));
 
           if (keys.isEmpty()) {
-            final var suffix = (int) (rng.nextDouble() * options.numSuffixes);
-            ctx.insert(new BiKey(prefix, suffix), Void.instance());
+            final var cloneId = (int) (rng.nextDouble() * options.numClonesPerHighlander);
+            ctx.insert(new BiKey(highlanderId, cloneId), Void.instance());
           } else {
             final var key = keys.iterator().next();
             ctx.delete(key);
@@ -113,14 +112,14 @@ public final class HighlanderSpec implements Spec<State, BiKey, Void> {
   public void verify(State state) {
     Transact.over(state.map).run(ctx -> {
       var liveKeys = 0;
-      for (var prefix = 0; prefix < options.numPrefixes; prefix++) {
-        final var keys = ctx.keys(BiKey.whereFirstIs(prefix));
+      for (var highlanderId = 0; highlanderId < options.numHighlanders; highlanderId++) {
+        final var keys = ctx.keys(BiKey.whereFirstIs(highlanderId));
         liveKeys += keys.size();
-        final var _prefix = prefix;
-        Assert.that(keys.size() <= 1, () -> String.format("Too many keys for prefix %d: %d", _prefix, keys.size()));
+        final var _highlanderId = highlanderId;
+        Assert.that(keys.size() <= 1, () -> String.format("Too many keys for highlander %d: %d", _highlanderId, keys.size()));
         for (var key : keys) {
-          final var value = ctx.read(key);
-          Assert.that(value != null, () -> "Null value for key " + key);
+          final var highlander = ctx.read(key);
+          Assert.that(highlander != null, () -> "Null value for key " + key);
         }
       }
 
