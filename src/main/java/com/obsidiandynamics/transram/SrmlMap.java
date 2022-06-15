@@ -15,6 +15,11 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
     public int mutexStripes = 1024;
     public Supplier<UpgradeableMutex> mutexFactory = UnfairUpgradeableMutex::new;
     public int queueDepth = 4;
+
+    void validate() {
+      Assert.that(mutexStripes > 0, () -> "Number of mutex stripes must exceed 0");
+      Assert.that(queueDepth > 0, () -> "Queue depth must exceed 0");
+    }
   }
 
   public static MapFactory factory(Options options) {
@@ -41,6 +46,7 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
   private final AtomicLong safeReadVersion = new AtomicLong();
 
   public SrmlMap(Options options) {
+    options.validate();
     queueDepth = options.queueDepth;
     mutexes = new StripedMutexes<>(options.mutexStripes, options.mutexFactory);
     store.put(InternalKey.SIZE, wrapInDeque(new RawVersioned(0, new Size(0))));

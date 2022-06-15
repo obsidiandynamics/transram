@@ -196,6 +196,25 @@ abstract class AbstractContextTest {
       assertThat(catchThrowableOfType(() -> ctx.delete(0), IllegalLifecycleStateException.class)
                      .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.DELETE_NONEXISTENT);
     }
+
+    @Test
+    void testKeysPredicate() throws ConcurrentModeFailure {
+      final var map = AbstractContextTest.this.<Integer, Nil>newMap();
+      {
+        final var ctx = map.transact();
+        for (var i = 0; i < 10; i++) {
+          ctx.insert(i, Nil.instance());
+        }
+        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.size()).isEqualTo(10);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.size()).isEqualTo(10);
+      }
+    }
   }
 
   @Nested

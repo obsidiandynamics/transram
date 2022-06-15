@@ -1,5 +1,8 @@
 package com.obsidiandynamics.transram.mutex;
 
+import com.obsidiandynamics.transram.util.*;
+
+import java.util.*;
 import java.util.function.*;
 
 public final class StripedMutexes<M extends Mutex> {
@@ -10,7 +13,7 @@ public final class StripedMutexes<M extends Mutex> {
 
     MutexRef(int stripe, M mutex) {
       this.stripe = stripe;
-      this.mutex = mutex;
+      this.mutex = Objects.requireNonNull(mutex);
     }
 
     public M mutex() {
