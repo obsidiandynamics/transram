@@ -1,5 +1,6 @@
 package com.obsidiandynamics.transram;
 
+import com.obsidiandynamics.transram.LifecycleFailure.*;
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 import com.obsidiandynamics.transram.util.*;
@@ -126,14 +127,14 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   @Override
   public void insert(K key, V value) throws BrokenSnapshotFailure {
-    Assert.that(value != null, () -> "Cannot insert null value");
+    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot insert null value");
     write(Key.wrap(key), value, StateChange.INSERTED);
     alterSize(1);
   }
 
   @Override
   public void update(K key, V value) {
-    Assert.that(value != null, () -> "Cannot update null value");
+    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot update null value");
     write(Key.wrap(key), value, StateChange.UNCHANGED);
   }
 
@@ -150,7 +151,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
         switch (change) {
           case INSERTED -> {
             if (existing.value != null) {
-              throw new IllegalStateException("Cannot insert an existing item for key " + key);
+              throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.INSERT_EXISTING, "Cannot insert an existing item for key " + key);
             }
             switch (existing.change) {
               case UNCHANGED -> {
@@ -163,12 +164,12 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
           }
           case UNCHANGED -> {
             if (existing.value == null) {
-              throw new IllegalStateException("Cannot update a non-existent item for key " + key);
+              throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.UPDATE_NONEXISTENT, "Cannot update a nonexistent item for key " + key);
             }
           }
           case DELETED -> {
             if (existing.value == null) {
-              throw new IllegalStateException("Cannot delete a non-existent item for key " + key);
+              throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.DELETE_NONEXISTENT, "Cannot delete a nonexistent item for key " + key);
             }
             switch (existing.change) {
               case INSERTED -> {
@@ -192,7 +193,11 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   private void alterSize(int sizeChange) throws BrokenSnapshotFailure {
     final var size = (Size) read(InternalKey.SIZE);
     Assert.that(size != null, () -> "No size object");
-    size.set(size.get() + sizeChange);
+    final var newSize = size.get() + sizeChange;
+    if (newSize < 0) {
+      throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.NEGATIVE_SIZE, "Negative size after delete");
+    }
+    size.set(newSize);
     write(InternalKey.SIZE, size, StateChange.UNCHANGED);
   }
 
@@ -291,24 +296,24 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
           case INSERTED -> {
             if (existingValues != null && existingValues.getFirst().hasValue()) {
               rollbackFromCommitAttempt(combinedMutexes);
-              throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+              throw new LifecycleFailure(Reason.INSERT_EXISTING, "Attempting to insert an existing item for key " + key);
             }
           }
           case UNCHANGED -> {
             final var existsUpstream = existingValues != null && existingValues.getFirst().hasValue();
             if (entry.getValue().value != null && !existsUpstream) {
               rollbackFromCommitAttempt(combinedMutexes);
-              throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+              throw new LifecycleFailure(Reason.UPDATE_NONEXISTENT, "Attempting to update a nonexistent item for key " + key);
             }
             if (entry.getValue().value == null && existsUpstream) {
               rollbackFromCommitAttempt(combinedMutexes);
-              throw new LifecycleFailure("Attempting to insert-delete an existent item for key " + key);
+              throw new LifecycleFailure(Reason.INSERT_DELETE_EXISTING, "Attempting to insert-delete an existing item for key " + key);
             }
           }
           case DELETED -> {
             if (existingValues == null || !existingValues.getFirst().hasValue()) {
               rollbackFromCommitAttempt(combinedMutexes);
-              throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+              throw new LifecycleFailure(Reason.DELETE_NONEXISTENT, "Attempting to delete a nonexistent item for key " + key);
             }
           }
         }

@@ -1,5 +1,6 @@
 package com.obsidiandynamics.transram;
 
+import com.obsidiandynamics.transram.LifecycleFailure.*;
 import com.obsidiandynamics.transram.SrmlMap.*;
 import com.obsidiandynamics.transram.TransContext.*;
 import org.junit.jupiter.api.*;
@@ -112,12 +113,98 @@ class SrmlContextTest {
         assertThat(ctx.keys(__ -> true)).containsExactly(0, 1);
       }
     }
+
+    @Test
+    void testNullKeyOrValue() {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      assertThat(catchThrowable(() -> ctx.read(null))).isExactlyInstanceOf(NullKeyAssertionError.class);
+      assertThat(catchThrowable(() -> ctx.insert(null, Nil.instance()))).isExactlyInstanceOf(NullKeyAssertionError.class);
+      assertThat(catchThrowable(() -> ctx.insert(0, null))).isExactlyInstanceOf(NullValueAssertionError.class);
+      assertThat(catchThrowable(() -> ctx.update(null, Nil.instance()))).isExactlyInstanceOf(NullKeyAssertionError.class);
+      assertThat(catchThrowable(() -> ctx.update(0, null))).isExactlyInstanceOf(NullValueAssertionError.class);
+      assertThat(catchThrowable(() -> ctx.delete(null))).isExactlyInstanceOf(NullKeyAssertionError.class);
+    }
+
+    @Test
+    void testReadThenUpdateNonexistent() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      assertThat(ctx.read(0)).isNull();
+      assertThat(catchThrowableOfType(() -> ctx.update(0, Nil.instance()), IllegalLifecycleStateException.class)
+                     .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.UPDATE_NONEXISTENT);
+    }
+
+    @Test
+    void testReadThenDeleteNonexistent() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      assertThat(ctx.read(0)).isNull();
+      assertThat(catchThrowableOfType(() -> ctx.delete(0), IllegalLifecycleStateException.class)
+                     .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.DELETE_NONEXISTENT);
+    }
+
+    @Test
+    void testReadThenInsertExisting() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isEqualTo(Nil.instance());
+        assertThat(catchThrowableOfType(() -> ctx.insert(0, Nil.instance()), IllegalLifecycleStateException.class)
+                       .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.INSERT_EXISTING);
+      }
+    }
+
+    @Test
+    void testInsertAfterInsert() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      ctx.insert(0, Nil.instance());
+      assertThat(ctx.size()).isEqualTo(1);
+      assertThat(catchThrowableOfType(() -> ctx.insert(0, Nil.instance()), IllegalLifecycleStateException.class)
+                     .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.INSERT_EXISTING);
+    }
+
+    @Test
+    void testNegativeSize() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      assertThat(catchThrowableOfType(() -> ctx.delete(0), IllegalLifecycleStateException.class)
+                     .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.NEGATIVE_SIZE);
+    }
+
+    @Test
+    void testUpdateAfterDelete() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      ctx.insert(0, Nil.instance());
+      ctx.delete(0);
+      assertThat(ctx.size()).isEqualTo(0); // no change after insert-delete
+      assertThat(catchThrowableOfType(() -> ctx.update(0, Nil.instance()), IllegalLifecycleStateException.class)
+                     .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.UPDATE_NONEXISTENT);
+    }
+
+    @Test
+    void testDeleteAfterDelete() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      ctx.insert(0, Nil.instance());
+      ctx.delete(0);
+      assertThat(ctx.size()).isEqualTo(0); // no change after insert-delete
+      assertThat(catchThrowableOfType(() -> ctx.delete(0), IllegalLifecycleStateException.class)
+                     .getReason()).isEqualTo(IllegalLifecycleStateException.Reason.DELETE_NONEXISTENT);
+    }
   }
 
   @Nested
   class LifecycleTests {
     @Test
-    void testInsertThenUpdateThenDeleteOfNonExistent() throws ConcurrentModeFailure {
+    void testInsertThenUpdateThenDeleteOfNonexistent() throws ConcurrentModeFailure {
       final var map = SrmlContextTest.<Integer, StringBox>newMap();
       {
         final var ctx = map.transact();
@@ -178,8 +265,124 @@ class SrmlContextTest {
     }
 
     @Test
-    void testInsertOfExisting() {
+    void testInsertOfExisting() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        assertThat(catchThrowableOfType(ctx::commit, LifecycleFailure.class)
+                       .getReason()).isEqualTo(Reason.INSERT_EXISTING);
+        assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
+      }
+    }
+
+    @Test
+    void testUpdateOfNonexistent() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      ctx.update(0, Nil.instance());
+      assertThat(catchThrowableOfType(ctx::commit, LifecycleFailure.class)
+                     .getReason()).isEqualTo(Reason.UPDATE_NONEXISTENT);
+      assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
+    }
+
+    @Test
+    void testDeleteOfNonexistent() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      final var ctx = map.transact();
+      ctx.insert(0, Nil.instance()); // inserting an item here prevents negative size upon later delete
+      ctx.delete(1);
+      assertThat(catchThrowableOfType(ctx::commit, LifecycleFailure.class)
+                     .getReason()).isEqualTo(Reason.DELETE_NONEXISTENT);
+      assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
+    }
+
+    @Test
+    void testInsertDeleteOfNonexistent() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, Nil>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        ctx.delete(0);
+        assertThat(catchThrowableOfType(ctx::commit, LifecycleFailure.class)
+                       .getReason()).isEqualTo(Reason.INSERT_DELETE_EXISTING);
+        assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
+      }
+    }
+
+    @Test
+    void testAntidependencyFailureOnRead() throws ConcurrentModeFailure {
       final var map = SrmlContextTest.<Integer, StringBox>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, StringBox.of("zero_v0"));
+        ctx.commit();
+      }
+
+      final var ctx1 = map.transact();
+      ctx1.update(0, StringBox.of("zero_v1"));
+      final var ctx2 = map.transact();
+      assertThat(ctx2.read(0)).isEqualTo(StringBox.of("zero_v0")); // snapshot read
+
+      ctx1.commit();
+      assertThat(catchThrowable(ctx2::commit)).isExactlyInstanceOf(AntidependencyFailure.class);
+    }
+
+    @Test
+    void testAntidependencyFailureOnReadAndWrite() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, StringBox>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, StringBox.of("zero_v0"));
+        ctx.commit();
+      }
+
+      final var ctx1 = map.transact();
+      ctx1.update(0, StringBox.of("zero_v1"));
+      final var ctx2 = map.transact();
+      assertThat(ctx2.read(0)).isEqualTo(StringBox.of("zero_v0")); // snapshot read
+      ctx2.update(0, StringBox.of("zero_v2"));
+
+      ctx1.commit();
+      assertThat(catchThrowable(ctx2::commit)).isExactlyInstanceOf(AntidependencyFailure.class);
+
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isEqualTo(StringBox.of("zero_v1"));
+      }
+    }
+
+    @Test
+    void testBlindWriteInCommitmentOrder() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.<Integer, StringBox>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, StringBox.of("zero_v0"));
+        ctx.commit();
+      }
+
+      final var ctx1 = map.transact();
+      ctx1.update(0, StringBox.of("zero_v1"));
+      final var ctx2 = map.transact();
+      ctx2.update(0, StringBox.of("zero_v2"));
+
+      ctx1.commit();
+      ctx2.commit();
+
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isEqualTo(StringBox.of("zero_v2"));
+      }
     }
   }
 

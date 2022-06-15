@@ -8,8 +8,12 @@ public final class Assert {
   }
 
   public static void that(boolean condition, Supplier<String> messageBuilder) {
+    that(condition, AssertionError::new, messageBuilder);
+  }
+
+  public static void that(boolean condition, Function<String, AssertionError> errorMaker, Supplier<String> messageBuilder) {
     if (! condition) {
-      throw new AssertionError(messageBuilder.get());
+      throw errorMaker.apply(messageBuilder.get());
     }
   }
 }

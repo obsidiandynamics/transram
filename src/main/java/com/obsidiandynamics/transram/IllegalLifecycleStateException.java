@@ -1,16 +1,16 @@
 package com.obsidiandynamics.transram;
 
-public final class LifecycleFailure extends ConcurrentModeFailure {
+public final class IllegalLifecycleStateException extends IllegalStateException {
   public enum Reason {
     INSERT_EXISTING,
     UPDATE_NONEXISTENT,
-    INSERT_DELETE_EXISTING,
-    DELETE_NONEXISTENT
+    DELETE_NONEXISTENT,
+    NEGATIVE_SIZE
   }
 
   private final Reason reason;
 
-  public LifecycleFailure(Reason reason, String m) {
+  public IllegalLifecycleStateException(Reason reason, String m) {
     super(m, null);
     this.reason = reason;
   }

@@ -1,5 +1,6 @@
 package com.obsidiandynamics.transram;
 
+import com.obsidiandynamics.transram.LifecycleFailure.*;
 import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
 import com.obsidiandynamics.transram.util.*;
@@ -127,14 +128,14 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   @Override
   public void insert(K key, V value) throws MutexAcquisitionFailure {
-    Assert.that(value != null, () -> "Cannot insert null value");
+    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot insert null value");
     write(Key.wrap(key), value, ItemState.INSERTED);
     alterSize(1);
   }
 
   @Override
   public void update(K key, V value) throws MutexAcquisitionFailure {
-    Assert.that(value != null, () -> "Cannot update null value");
+    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot update null value");
     write(Key.wrap(key), value, ItemState.EXISTING);
   }
 
@@ -191,7 +192,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
           }
           case DELETED -> {
             if (existing.state == ItemState.DELETED) {
-              throw new IllegalStateException("Cannot delete a non-existent item for key " + key);
+              throw new IllegalStateException("Cannot delete a nonexistent item for key " + key);
             }
           }
         }
@@ -208,7 +209,11 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   private void alterSize(int sizeChange) throws MutexAcquisitionFailure {
     final var size = (Size) read(InternalKey.SIZE);
     Assert.that(size != null, () -> "No size object");
-    size.set(size.get() + sizeChange);
+    final var newSize = size.get() + sizeChange;
+    if (newSize < 0) {
+      throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.NEGATIVE_SIZE, "Negative size after delete");
+    }
+    size.set(newSize);
     write(InternalKey.SIZE, size, ItemState.EXISTING);
   }
 
@@ -228,7 +233,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   private void ensureOpen() {
     if (state != State.OPEN) {
-      throw new IllegalStateException("Transaction is not open");
+      throw new TransactionNotOpenException();
     }
   }
 
@@ -256,19 +261,19 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
           case INSERTED -> {
             if (existingValue != null) {
               rollback();
-              throw new LifecycleFailure("Attempting to insert an existing item for key " + key);
+              throw new LifecycleFailure(Reason.INSERT_EXISTING, "Attempting to insert an existing item for key " + key);
             }
           }
           case EXISTING -> {
             if (existingValue == null) {
               rollback();
-              throw new LifecycleFailure("Attempting to update an non-existent item for key " + key);
+              throw new LifecycleFailure(Reason.UPDATE_NONEXISTENT, "Attempting to update an nonexistent item for key " + key);
             }
           }
           case DELETED -> {
             if (existingValue == null) {
               rollback();
-              throw new LifecycleFailure("Attempting to delete a non-existent item for key " + key);
+              throw new LifecycleFailure(Reason.DELETE_NONEXISTENT, "Attempting to delete a nonexistent item for key " + key);
             }
           }
         }
@@ -299,7 +304,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   @Override
   public long getVersion() {
     if (state != State.COMMITTED) {
-      throw new IllegalStateException("Transaction is not committed");
+      throw new TransactionNotCommittedException();
     }
     return version;
   }
