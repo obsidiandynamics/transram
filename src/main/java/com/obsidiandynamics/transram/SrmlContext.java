@@ -154,12 +154,8 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
               throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.INSERT_EXISTING, "Cannot insert an existing item for key " + key);
             }
             switch (existing.change) {
-              case UNCHANGED -> {
-                existing.change = StateChange.INSERTED;
-              }
-              case DELETED -> {
-                existing.change = StateChange.UNCHANGED;
-              }
+              case UNCHANGED -> existing.change = StateChange.INSERTED;
+              case DELETED -> existing.change = StateChange.UNCHANGED;
             }
           }
           case UNCHANGED -> {
@@ -172,12 +168,8 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
               throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.DELETE_NONEXISTENT, "Cannot delete a nonexistent item for key " + key);
             }
             switch (existing.change) {
-              case INSERTED -> {
-                existing.change = StateChange.UNCHANGED;
-              }
-              case UNCHANGED -> {
-                existing.change = StateChange.DELETED;
-              }
+              case INSERTED -> existing.change = StateChange.UNCHANGED;
+              case UNCHANGED -> existing.change = StateChange.DELETED;
             }
           }
         }
