@@ -1,0 +1,222 @@
+package com.obsidiandynamics.transram;
+
+import com.obsidiandynamics.transram.Ss2plMap.*;
+import org.junit.jupiter.api.*;
+
+public final class Ss2plContextTest extends AbstractContextTest {
+  @Override
+  <K, V extends DeepCloneable<V>> Ss2plMap<K, V> newMap() {
+    return newMap(new Options());
+  }
+
+  private static <K, V extends DeepCloneable<V>> Ss2plMap<K, V> newMap(Options options) {
+    return new Ss2plMap<>(options);
+  }
+
+  @Nested
+  class ValidationTests {
+//    @Test
+//    void testValidOptions() {
+//      assertThat(catchThrowableOfType(() -> newMap(new Options() {{
+//        mutexStripes = 0;
+//      }}), AssertionError.class)).hasMessage("Number of mutex stripes must exceed 0");
+//
+//      assertThat(catchThrowableOfType(() -> newMap(new Options() {{
+//        queueDepth = 0;
+//      }}), AssertionError.class)).hasMessage("Queue depth must exceed 0");
+//    }
+  }
+
+  @Nested
+  class AntidependencyTests {
+//    @Test
+//    void testAntidependencyFailureOnReadDueToWrite() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.this.<Integer, StringBox>newMap();
+//      {
+//        final var ctx = map.transact();
+//        ctx.insert(0, StringBox.of("zero_v0"));
+//        ctx.commit();
+//      }
+//
+//      final var ctx1 = map.transact();
+//      ctx1.update(0, StringBox.of("zero_v1"));
+//      final var ctx2 = map.transact();
+//      assertThat(ctx2.read(0)).isEqualTo(StringBox.of("zero_v0")); // snapshot read
+//
+//      ctx1.commit();
+//      assertThat(catchThrowable(ctx2::commit)).isExactlyInstanceOf(AntidependencyFailure.class);
+//    }
+//
+//    @Test
+//    void testAntidependencyFailureOnReadAndWriteDueToWrite() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.this.<Integer, StringBox>newMap();
+//      {
+//        final var ctx = map.transact();
+//        ctx.insert(0, StringBox.of("zero_v0"));
+//        ctx.commit();
+//      }
+//
+//      final var ctx1 = map.transact();
+//      ctx1.update(0, StringBox.of("zero_v1"));
+//      final var ctx2 = map.transact();
+//      assertThat(ctx2.read(0)).isEqualTo(StringBox.of("zero_v0")); // snapshot read
+//      ctx2.update(0, StringBox.of("zero_v2"));
+//
+//      ctx1.commit();
+//      assertThat(catchThrowable(ctx2::commit)).isExactlyInstanceOf(AntidependencyFailure.class);
+//
+//      {
+//        final var ctx = map.transact();
+//        assertThat(ctx.read(0)).isEqualTo(StringBox.of("zero_v1"));
+//      }
+//    }
+//
+//    @Test
+//    void testAntidependencyFailureOnReadDueToDelete() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.this.<Integer, StringBox>newMap();
+//      {
+//        final var ctx = map.transact();
+//        ctx.insert(0, StringBox.of("zero_v0"));
+//        ctx.commit();
+//      }
+//
+//      final var ctx1 = map.transact();
+//      ctx1.delete(0);
+//      final var ctx2 = map.transact();
+//      assertThat(ctx2.read(0)).isEqualTo(StringBox.of("zero_v0")); // snapshot read
+//
+//      ctx1.commit();
+//      assertThat(catchThrowable(ctx2::commit)).isExactlyInstanceOf(AntidependencyFailure.class);
+//    }
+//
+//    @Test
+//    void testBlindWriteInCommitmentOrder() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.this.<Integer, StringBox>newMap();
+//      {
+//        final var ctx = map.transact();
+//        ctx.insert(0, StringBox.of("zero_v0"));
+//        ctx.commit();
+//      }
+//
+//      final var ctx1 = map.transact();
+//      ctx1.update(0, StringBox.of("zero_v1"));
+//      final var ctx2 = map.transact();
+//      ctx2.update(0, StringBox.of("zero_v2"));
+//
+//      ctx1.commit();
+//      ctx2.commit();
+//
+//      {
+//        final var ctx = map.transact();
+//        assertThat(ctx.read(0)).isEqualTo(StringBox.of("zero_v2"));
+//      }
+//    }
+//
+//    @Test
+//    void testAntidependencyFailureOnResizeAfterSizeCheck() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.this.<Integer, Nil>newMap();
+//      final var ctx1 = map.transact();
+//      assertThat(ctx1.size()).isEqualTo(0);
+//
+//      final var ctx2 = map.transact();
+//      ctx2.insert(0, Nil.instance());
+//      ctx2.commit();
+//
+//      assertThat(catchThrowable(ctx1::commit)).isExactlyInstanceOf(AntidependencyFailure.class);
+//    }
+//
+//    @Test
+//    void testAntidependencyFailureOnResizeAfterKeyScan() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.this.<Integer, Nil>newMap();
+//      final var ctx1 = map.transact();
+//      assertThat(ctx1.keys(__ -> true)).isEmpty();
+//
+//      final var ctx2 = map.transact();
+//      ctx2.insert(0, Nil.instance());
+//      ctx2.commit();
+//
+//      assertThat(catchThrowable(ctx1::commit)).isExactlyInstanceOf(AntidependencyFailure.class);
+//    }
+  }
+
+  @Nested
+  class SnapshotTests {
+//    @Test
+//    void testSnapshotRead() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.this.<Integer, StringBox>newMap();
+//      {
+//        final var ctx = map.transact();
+//        ctx.insert(0, StringBox.of("zero_v0"));
+//        ctx.insert(1, StringBox.of("one_v0"));
+//        ctx.insert(2, StringBox.of("two_v0"));
+//        ctx.commit();
+//      }
+//      {
+//        final var ctx = map.transact();
+//        ctx.delete(2);
+//        ctx.commit();
+//      }
+//
+//      final var ctx1 = map.transact();
+//      ctx1.update(0, StringBox.of("zero_v1"));
+//      ctx1.delete(1);
+//      ctx1.insert(2, StringBox.of("two_v1"));
+//
+//      final var ctx2 = map.transact();
+//      ctx1.commit();
+//
+//      assertThat(ctx2.read(0)).isEqualTo(StringBox.of("zero_v0"));
+//      assertThat(ctx2.read(1)).isEqualTo(StringBox.of("one_v0"));
+//      assertThat(ctx2.read(2)).isNull();
+//      assertThat(ctx2.size()).isEqualTo(2);
+//      assertThat(ctx2.keys(__ -> true)).containsExactly(0, 1);
+//    }
+//
+//    @Test
+//    void testBrokenSnapshot() throws ConcurrentModeFailure {
+//      final var map = Ss2plContextTest.<Integer, StringBox>newMap(new Options() {{
+//        queueDepth = 1;
+//      }});
+//      {
+//        final var ctx = map.transact();
+//        ctx.insert(0, StringBox.of("zero_v0"));
+//        ctx.commit();
+//      }
+//
+//      final var ctx1 = map.transact();
+//      ctx1.update(0, StringBox.of("zero_v1"));
+//      final var ctx2 = map.transact();
+//      ctx1.commit();
+//      assertThat(catchThrowable(() -> ctx2.read(0))).isExactlyInstanceOf(BrokenSnapshotFailure.class);
+//      assertThat(catchThrowable(() -> ctx2.keys(__ -> true))).isExactlyInstanceOf(BrokenSnapshotFailure.class);
+//    }
+//
+//    @Test
+//    void testInterruptOnReadCommit() throws ConcurrentModeFailure, InterruptedException {
+//      final var mutex = Mockito.mock(UpgradeableMutex.class);
+//      Mockito.doThrow(InterruptedException.class).when(mutex).tryReadAcquire(Mockito.anyLong());
+//      final var map = Ss2plContextTest.<Integer, Nil>newMap(new Options() {{
+//        mutexFactory = () -> mutex;
+//      }});
+//      final var ctx = map.transact();
+//      ctx.read(0);
+//
+//      assertThat(catchThrowableOfType(ctx::commit, MutexAcquisitionFailure.class)).hasMessage("Interrupted while acquiring read lock");
+//      assertThat(Thread.interrupted()).isFalse();
+//    }
+//
+//    @Test
+//    void testInterruptOnWriteCommit() throws ConcurrentModeFailure, InterruptedException {
+//      final var mutex = Mockito.mock(UpgradeableMutex.class);
+//      Mockito.doThrow(InterruptedException.class).when(mutex).tryWriteAcquire(Mockito.anyLong());
+//      final var map = Ss2plContextTest.<Integer, Nil>newMap(new Options() {{
+//        mutexFactory = () -> mutex;
+//      }});
+//      final var ctx = map.transact();
+//      ctx.insert(0, Nil.instance());
+//
+//      assertThat(catchThrowableOfType(ctx::commit, MutexAcquisitionFailure.class)).hasMessage("Interrupted while acquiring write lock");
+//      assertThat(Thread.interrupted()).isFalse();
+//    }
+  }
+}

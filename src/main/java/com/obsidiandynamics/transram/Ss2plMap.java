@@ -18,7 +18,7 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
 
     void validate() {
       Assert.that(mutexStripes > 0, () -> "Number of mutex stripes must exceed 0");
-      Assert.that(mutexTimeoutMs > 0, () -> "Mutex timeout must be equal to or greater than 0");
+      Assert.that(mutexTimeoutMs >= 0, () -> "Mutex timeout must be equal to or greater than 0");
     }
   }
 

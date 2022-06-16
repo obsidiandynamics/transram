@@ -1,8 +1,8 @@
 package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.LifecycleFailure.*;
-import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.mutex.StripedMutexes.*;
+import com.obsidiandynamics.transram.mutex.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;
@@ -17,19 +17,19 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   private final Set<MutexRef<UpgradeableMutex>> writeMutexes = new HashSet<>();
 
-  private enum ItemState {
-    INSERTED, EXISTING, DELETED
+  private enum StateChange {
+    INSERTED, UNCHANGED, DELETED
   }
 
   private static final class Tracker {
     DeepCloneable<?> value;
-    ItemState state;
     boolean written;
+    StateChange change;
 
-    Tracker(DeepCloneable<?> value, ItemState state, boolean written) {
+    Tracker(DeepCloneable<?> value, boolean written, StateChange change) {
       this.value = value;
-      this.state = state;
       this.written = written;
+      this.change = change;
     }
   }
 
@@ -77,10 +77,10 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
     final var stored = map.getStore().get(key);
     if (stored != null) {
       final var cloned = DeepCloneable.clone(Unsafe.cast(stored.getValue()));
-      local.put(key, new Tracker(cloned, ItemState.EXISTING, false));
+      local.put(key, new Tracker(cloned, false, StateChange.UNCHANGED));
       return cloned;
     } else {
-      local.put(key, new Tracker(null, ItemState.DELETED, false));
+      local.put(key, new Tracker(null, false, StateChange.UNCHANGED));
       return null;
     }
   }
@@ -129,23 +129,23 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   @Override
   public void insert(K key, V value) throws MutexAcquisitionFailure {
     Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot insert null value");
-    write(Key.wrap(key), value, ItemState.INSERTED);
+    write(Key.wrap(key), value, StateChange.INSERTED);
     alterSize(1);
   }
 
   @Override
   public void update(K key, V value) throws MutexAcquisitionFailure {
     Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot update null value");
-    write(Key.wrap(key), value, ItemState.EXISTING);
+    write(Key.wrap(key), value, StateChange.UNCHANGED);
   }
 
   @Override
   public void delete(K key) throws MutexAcquisitionFailure {
-    write(Key.wrap(key), null, ItemState.DELETED);
+    write(Key.wrap(key), null, StateChange.DELETED);
     alterSize(-1);
   }
 
-  private void write(Key key, DeepCloneable<?> value, ItemState state) throws MutexAcquisitionFailure {
+  private void write(Key key, DeepCloneable<?> value, StateChange change) throws MutexAcquisitionFailure {
     ensureOpen();
     final var mutex = map.getMutexes().forKey(key);
     final var addedMutex = writeMutexes.add(mutex);
@@ -179,29 +179,36 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
     local.compute(key, (__, existing) -> {
       if (existing != null) {
-        switch (state) {
+        switch (change) {
           case INSERTED -> {
-            if (existing.state == ItemState.EXISTING) {
-              throw new IllegalStateException("Cannot insert an existing item for key " + key);
+            if (existing.value != null) {
+              throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.INSERT_EXISTING, "Cannot insert an existing item for key " + key);
+            }
+            switch (existing.change) {
+              case UNCHANGED -> existing.change = Ss2plContext.StateChange.INSERTED;
+              case DELETED -> existing.change = Ss2plContext.StateChange.UNCHANGED;
             }
           }
-          case EXISTING -> {
-            if (existing.state == ItemState.DELETED) {
-              throw new IllegalStateException("Cannot update a deleted item for key " + key);
+          case UNCHANGED -> {
+            if (existing.value == null) {
+              throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.UPDATE_NONEXISTENT, "Cannot update a nonexistent item for key " + key);
             }
           }
           case DELETED -> {
-            if (existing.state == ItemState.DELETED) {
-              throw new IllegalStateException("Cannot delete a nonexistent item for key " + key);
+            if (existing.value == null) {
+              throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.DELETE_NONEXISTENT, "Cannot delete a nonexistent item for key " + key);
+            }
+            switch (existing.change) {
+              case INSERTED -> existing.change = Ss2plContext.StateChange.UNCHANGED;
+              case UNCHANGED -> existing.change = Ss2plContext.StateChange.DELETED;
             }
           }
         }
         existing.value = value;
-        existing.state = state;
         existing.written = true;
         return existing;
       } else {
-        return new Tracker(value, state, true);
+        return new Tracker(value, true, change);
       }
     });
   }
@@ -214,7 +221,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
       throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.NEGATIVE_SIZE, "Negative size after delete");
     }
     size.set(newSize);
-    write(InternalKey.SIZE, size, ItemState.EXISTING);
+    write(InternalKey.SIZE, size, StateChange.UNCHANGED);
   }
 
   @Override
@@ -248,26 +255,29 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   @Override
   public void commit() throws LifecycleFailure {
-    if (state != State.OPEN) {
-      return;
-    }
+    ensureOpen();
 
     for (var entry : local.entrySet()) {
       final var tracker = entry.getValue();
       if (tracker.written) {
         final var key = entry.getKey();
         final var existingValue = map.getStore().get(key);
-        switch (tracker.state) {
+        switch (tracker.change) {
           case INSERTED -> {
             if (existingValue != null) {
               rollback();
               throw new LifecycleFailure(Reason.INSERT_EXISTING, "Attempting to insert an existing item for key " + key);
             }
           }
-          case EXISTING -> {
-            if (existingValue == null) {
+          case UNCHANGED -> {
+            if (entry.getValue().value != null && existingValue == null) {
               rollback();
-              throw new LifecycleFailure(Reason.UPDATE_NONEXISTENT, "Attempting to update an nonexistent item for key " + key);
+              throw new LifecycleFailure(Reason.UPDATE_NONEXISTENT, "Attempting to update a nonexistent item for key " + key);
+            }
+
+            if (entry.getValue().value == null && existingValue != null) {
+              rollback();
+              throw new LifecycleFailure(Reason.INSERT_DELETE_EXISTING, "Attempting to insert-delete an existing item for key " + key);
             }
           }
           case DELETED -> {
