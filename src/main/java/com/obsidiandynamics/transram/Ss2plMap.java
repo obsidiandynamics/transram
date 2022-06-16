@@ -15,6 +15,11 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
     public int mutexStripes = 1024;
     public Supplier<UpgradeableMutex> mutexFactory = UnfairUpgradeableMutex::new;
     public long mutexTimeoutMs = 10;
+
+    void validate() {
+      Assert.that(mutexStripes > 0, () -> "Number of mutex stripes must exceed 0");
+      Assert.that(mutexTimeoutMs > 0, () -> "Mutex timeout must be equal to or greater than 0");
+    }
   }
 
   public static MapFactory factory(Ss2plMap.Options options) {
@@ -35,6 +40,7 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
   private final AtomicLong version = new AtomicLong();
 
   public Ss2plMap(Options options) {
+    options.validate();
     this.options = options;
     mutexes = new StripedMutexes<>(options.mutexStripes, options.mutexFactory);
     store.put(InternalKey.SIZE, new RawVersioned(0, new Size(0)));

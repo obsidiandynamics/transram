@@ -18,6 +18,7 @@ abstract class AbstractContextTest {
       assertThat(ctx.size()).isEqualTo(0);
       assertThat(ctx.keys(__ -> true)).isEmpty();
       assertThat(ctx.read(0)).isNull();
+      ctx.commit();
     }
 
     @Test
@@ -246,6 +247,23 @@ abstract class AbstractContextTest {
         final var ctx = map.transact();
         assertThat(ctx.read(0)).isNull();
         assertThat(ctx.size()).isEqualTo(0);
+      }
+    }
+
+    @Test
+    void testInsertThenThenDeleteThenInsertOfNonexistent() throws ConcurrentModeFailure {
+      final var map = AbstractContextTest.this.<Integer, StringBox>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, StringBox.of("zero_v0"));
+        ctx.delete(0);
+        ctx.insert(0, StringBox.of("zero_v1"));
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isEqualTo(StringBox.of("zero_v1"));
+        assertThat(ctx.size()).isEqualTo(1);
       }
     }
 

@@ -43,7 +43,6 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   SrmlContext(SrmlMap<K, V> map) {
     this.map = map;
-
     readVersion = map.safeReadVersion().get();
   }
 
@@ -371,17 +370,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     }
 
     if (highestVersionPurged != 0) {
-      while (true) {
-        final var existingSafeReadVersion = map.safeReadVersion().get();
-        if (highestVersionPurged > existingSafeReadVersion) {
-          final var updated = map.safeReadVersion().compareAndSet(existingSafeReadVersion, highestVersionPurged);
-          if (updated) {
-            break;
-          }
-        } else {
-          break;
-        }
-      }
+      Cas.compareAndSetConditionally(map.safeReadVersion(), highestVersionPurged, Cas.lowerThan(highestVersionPurged));
     }
   }
 

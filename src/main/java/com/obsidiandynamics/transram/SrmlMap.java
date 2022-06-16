@@ -98,10 +98,6 @@ public final class SrmlMap<K, V extends DeepCloneable<V>> implements TransMap<K,
     return queuedContexts;
   }
 
-  long getVersion() {
-    return version;
-  }
-
   long incrementAndGetVersion() {
     return ++version;
   }

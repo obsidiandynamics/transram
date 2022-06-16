@@ -3,12 +3,12 @@ package com.obsidiandynamics.transram.run;
 import com.obsidiandynamics.transram.*;
 import com.obsidiandynamics.transram.mutex.*;
 
-public class RunAllSrmlSpecs {
+public class RunAllSs2plSpecs {
   public static void main(String[] args) throws InterruptedException {
-    AllSpecs.run(SrmlMap.factory(new SrmlMap.Options() {{
+    AllSpecs.run(Ss2plMap.factory(new Ss2plMap.Options() {{
       mutexStripes = 1024;
       mutexFactory = UnfairUpgradeableMutex::new;
-      queueDepth = 4;
+      mutexTimeoutMs = 0;
     }}));
   }
 }

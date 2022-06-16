@@ -1,7 +1,9 @@
 package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.SrmlMap.*;
+import com.obsidiandynamics.transram.mutex.*;
 import org.junit.jupiter.api.*;
+import org.mockito.*;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -184,6 +186,41 @@ public final class SrmlContextTest extends AbstractContextTest {
         ctx.insert(0, StringBox.of("zero_v0"));
         ctx.commit();
       }
+
+      final var ctx1 = map.transact();
+      ctx1.update(0, StringBox.of("zero_v1"));
+      final var ctx2 = map.transact();
+      ctx1.commit();
+      assertThat(catchThrowable(() -> ctx2.read(0))).isExactlyInstanceOf(BrokenSnapshotFailure.class);
+      assertThat(catchThrowable(() -> ctx2.keys(__ -> true))).isExactlyInstanceOf(BrokenSnapshotFailure.class);
+    }
+
+    @Test
+    void testInterruptOnReadCommit() throws ConcurrentModeFailure, InterruptedException {
+      final var mutex = Mockito.mock(UpgradeableMutex.class);
+      Mockito.doThrow(InterruptedException.class).when(mutex).tryReadAcquire(Mockito.anyLong());
+      final var map = SrmlContextTest.<Integer, Nil>newMap(new Options() {{
+        mutexFactory = () -> mutex;
+      }});
+      final var ctx = map.transact();
+      ctx.read(0);
+
+      assertThat(catchThrowableOfType(ctx::commit, MutexAcquisitionFailure.class)).hasMessage("Interrupted while acquiring read lock");
+      assertThat(Thread.interrupted()).isFalse();
+    }
+
+    @Test
+    void testInterruptOnWriteCommit() throws ConcurrentModeFailure, InterruptedException {
+      final var mutex = Mockito.mock(UpgradeableMutex.class);
+      Mockito.doThrow(InterruptedException.class).when(mutex).tryWriteAcquire(Mockito.anyLong());
+      final var map = SrmlContextTest.<Integer, Nil>newMap(new Options() {{
+        mutexFactory = () -> mutex;
+      }});
+      final var ctx = map.transact();
+      ctx.insert(0, Nil.instance());
+
+      assertThat(catchThrowableOfType(ctx::commit, MutexAcquisitionFailure.class)).hasMessage("Interrupted while acquiring write lock");
+      assertThat(Thread.interrupted()).isFalse();
     }
   }
 }
