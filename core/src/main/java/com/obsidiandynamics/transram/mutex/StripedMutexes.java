@@ -1,7 +1,5 @@
 package com.obsidiandynamics.transram.mutex;
 
-import com.obsidiandynamics.transram.util.*;
-
 import java.util.*;
 import java.util.function.*;
 

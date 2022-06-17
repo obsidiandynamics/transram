@@ -6,8 +6,6 @@ import com.obsidiandynamics.transram.util.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static com.obsidiandynamics.transram.util.Table.*;
-
 public class RunUpgradeableLockWorkload {
   private static final int NUM_THREADS = 2;
 
@@ -102,18 +100,18 @@ public class RunUpgradeableLockWorkload {
     final var expectedValue = stopwatches[Opcode.WRITE.ordinal()].getNumSamples() + stopwatches[Opcode.UPGRADE.ordinal()].getNumSamples() + stopwatches[Opcode.DOWNGRADE.ordinal()].getNumSamples();
     Assert.that(expectedValue == state.value, () -> String.format("Expected: %d, actual: %d", expectedValue, state.value));
     final int[] padding = {10, 10, 15, 15};
-    System.out.format(layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)");
-    System.out.format(layout(padding), fill(padding, '-'));
+    System.out.format(Table.layout(padding), "opcode", "p(opcode)", "ops", "rate (op/s)");
+    System.out.format(Table.layout(padding), Table.fill(padding, '-'));
     for (var opcode : Opcode.values()) {
-      System.out.format(layout(padding),
+      System.out.format(Table.layout(padding),
                         opcode,
                         String.format("%,.3f", PROFILE[opcode.ordinal()]),
                         String.format("%,d", stopwatches[opcode.ordinal()].getNumSamples()),
                         String.format("%,.0f", 1000f * stopwatches[opcode.ordinal()].getNumSamples() / took));
     }
-    System.out.format(layout(padding), fill(padding, ' '));
+    System.out.format(Table.layout(padding), Table.fill(padding, ' '));
     final var totalOps = Arrays.stream(stopwatches).mapToLong(Stopwatch::getNumSamples).sum();
-    System.out.format(layout(padding),
+    System.out.format(Table.layout(padding),
                       "TOTAL",
                       String.format("%,.3f", 1.0),
                       String.format("%,d", totalOps),

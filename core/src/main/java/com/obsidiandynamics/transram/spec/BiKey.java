@@ -1,6 +1,6 @@
 package com.obsidiandynamics.transram.spec;
 
-import java.util.function.Predicate;
+import java.util.function.*;
 
 public final class BiKey {
   private final int first;

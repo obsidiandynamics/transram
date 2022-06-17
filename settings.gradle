@@ -1,2 +1,4 @@
 rootProject.name = 'transram'
+include 'core'
+include 'spec'
 

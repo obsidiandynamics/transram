@@ -8,8 +8,6 @@ import java.util.Map.*;
 import java.util.concurrent.*;
 import java.util.stream.*;
 
-import static com.obsidiandynamics.transram.util.Table.*;
-
 public final class Harness {
   private static final Double SCALE = Double.parseDouble(getEnvIgnoreCase("scale").orElse("1"));
 
@@ -102,14 +100,14 @@ public final class Harness {
 
   private static void dumpDetail(String[] operationNames, Result result, double[] profile) {
     final var padding = new int[] {15, 10, 15, 15, 15};
-    System.out.format(layout(padding), "operation", "p(op)", "ops", "rate (op/s)", "ns/op");
-    System.out.format(layout(padding), fill(padding, '-'));
+    System.out.format(Table.layout(padding), "operation", "p(op)", "ops", "rate (op/s)", "ns/op");
+    System.out.format(Table.layout(padding), Table.fill(padding, '-'));
     final var stopwatches = result.dispatcher.getStopwatches();
     final var totalOps = Arrays.stream(stopwatches).mapToLong(Stopwatch::getNumSamples).sum();
     for (var ordinal = 0; ordinal < operationNames.length; ordinal++) {
       final var opcode = operationNames[ordinal];
       final var stopwatch = stopwatches[ordinal];
-      System.out.format(layout(padding),
+      System.out.format(Table.layout(padding),
                         opcode,
                         String.format("%,.3f", profile[ordinal]),
                         String.format("%,d", stopwatch.getNumSamples()),
@@ -117,8 +115,8 @@ public final class Harness {
                         stopwatch.hasSamples() ? String.format("%,.0f", stopwatch.getMeanDuration()) : '-');
     }
 
-    System.out.format(layout(padding), fill(padding, ' '));
-    System.out.format(layout(padding),
+    System.out.format(Table.layout(padding), Table.fill(padding, ' '));
+    System.out.format(Table.layout(padding),
                       "TOTAL",
                       String.format("%,.3f", 1.0),
                       String.format("%,d", totalOps),
@@ -135,27 +133,27 @@ public final class Harness {
     final var cols = new ArrayList<String>(padding.length);
     cols.add("operation\\profile");
     cols.addAll(IntStream.range(1, profiles.length + 1).boxed().map(String::valueOf).collect(Collectors.toList()));
-    System.out.format(layout(padding), cols.toArray());
-    System.out.format(layout(padding), fill(padding, '-'));
+    System.out.format(Table.layout(padding), cols.toArray());
+    System.out.format(Table.layout(padding), Table.fill(padding, '-'));
     for (var ordinal = 0; ordinal < operationNames.length; ordinal++) {
       cols.set(0, operationNames[ordinal]);
       for (var profileIdx = 0; profileIdx < profiles.length; profileIdx++) {
         cols.set(profileIdx + 1, String.valueOf(profiles[profileIdx][ordinal]));
       }
-      System.out.format(layout(padding), cols.toArray());
+      System.out.format(Table.layout(padding), cols.toArray());
     }
   }
 
   private static void dumpSummaries(Result[] results) {
     final var padding = new int[] {8, 9, 15, 15, 13, 15, 15, 15, 10, 10};
-    System.out.format(layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "l.cycle faults", "efficiency", "refs");
-    System.out.format(layout(padding), fill(padding, '-'));
+    System.out.format(Table.layout(padding), "profile", "took (s)", "ops", "rate (op/s)", "mutex faults", "snapshot faults", "antidep. faults", "l.cycle faults", "efficiency", "refs");
+    System.out.format(Table.layout(padding), Table.fill(padding, '-'));
     for (var i = 0; i < results.length; i++) {
       final var result = results[i];
       final var stopwatches = result.dispatcher.getStopwatches();
       final var totalOps = Arrays.stream(stopwatches).mapToLong(Stopwatch::getNumSamples).sum();
       final var totalFailures = result.failures.mutex.get() + result.failures.snapshot.get() + result.failures.antidependency.get();
-      System.out.format(layout(padding),
+      System.out.format(Table.layout(padding),
                         i + 1,
                         String.format("%,.1f", result.elapsedMs / 1000f),
                         String.format("%,d", totalOps),
