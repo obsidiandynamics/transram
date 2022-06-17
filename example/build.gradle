@@ -1,0 +1,4 @@
+dependencies {
+//    implementation 'com.obsidiandynamics.transram:core:1.1.0-SNAPSHOT'
+    implementation project(':core')
+}

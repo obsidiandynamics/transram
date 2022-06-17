@@ -65,7 +65,8 @@ public final class StripedMutexes<M extends Mutex> {
   }
 
   public static int hash(Object key, int stripes) {
-    return (key.hashCode() + stripes) % stripes;
+    final var rawHash = key.hashCode() % stripes;
+    return rawHash < 0 ? rawHash + stripes : rawHash;
   }
 
   public MutexRef<M> forKey(Object key) {
