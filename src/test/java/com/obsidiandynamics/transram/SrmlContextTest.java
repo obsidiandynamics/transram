@@ -117,7 +117,7 @@ public final class SrmlContextTest extends AbstractContextTest {
     }
 
     @Test
-    void testAntidependencyFailureOnResizeAfterSizeCheck() throws ConcurrentModeFailure {
+    void testAntidependencyFailureOnSizeCheckDueToResize() throws ConcurrentModeFailure {
       final var map = SrmlContextTest.this.<Integer, Nil>newMap();
       final var ctx1 = map.transact();
       assertThat(ctx1.size()).isEqualTo(0);
@@ -130,7 +130,7 @@ public final class SrmlContextTest extends AbstractContextTest {
     }
 
     @Test
-    void testAntidependencyFailureOnResizeAfterKeyScan() throws ConcurrentModeFailure {
+    void testAntidependencyFailureOnKeyScanDueToResize() throws ConcurrentModeFailure {
       final var map = SrmlContextTest.this.<Integer, Nil>newMap();
       final var ctx1 = map.transact();
       assertThat(ctx1.keys(__ -> true)).isEmpty();
@@ -194,7 +194,10 @@ public final class SrmlContextTest extends AbstractContextTest {
       assertThat(catchThrowable(() -> ctx2.read(0))).isExactlyInstanceOf(BrokenSnapshotFailure.class);
       assertThat(catchThrowable(() -> ctx2.keys(__ -> true))).isExactlyInstanceOf(BrokenSnapshotFailure.class);
     }
+  }
 
+  @Nested
+  class InterruptTests {
     @Test
     void testInterruptOnReadCommit() throws ConcurrentModeFailure, InterruptedException {
       final var mutex = Mockito.mock(UpgradeableMutex.class);
@@ -206,7 +209,6 @@ public final class SrmlContextTest extends AbstractContextTest {
       ctx.read(0);
 
       assertThat(catchThrowableOfType(ctx::commit, MutexAcquisitionFailure.class)).hasMessage("Interrupted while acquiring read lock");
-      assertThat(Thread.interrupted()).isFalse();
     }
 
     @Test
@@ -220,7 +222,6 @@ public final class SrmlContextTest extends AbstractContextTest {
       ctx.insert(0, Nil.instance());
 
       assertThat(catchThrowableOfType(ctx::commit, MutexAcquisitionFailure.class)).hasMessage("Interrupted while acquiring write lock");
-      assertThat(Thread.interrupted()).isFalse();
     }
   }
 }

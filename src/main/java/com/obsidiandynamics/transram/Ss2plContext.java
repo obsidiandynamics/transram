@@ -65,11 +65,11 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
           if (!mutex.mutex().tryReadAcquire(mutexTimeoutMs)) {
             readMutexes.remove(mutex);
             rollback();
-            throw new MutexAcquisitionFailure("Timed out while acquiring read mutex for key " + key, null);
+            throw new MutexAcquisitionFailure("Timed out while acquiring read mutex", null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new MutexAcquisitionFailure("Interrupted while acquiring read mutex for key " + key, e);
+          throw new MutexAcquisitionFailure("Interrupted while acquiring read mutex", e);
         }
       }
     }
@@ -157,22 +157,22 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
             readMutexes.add(mutex);
             writeMutexes.remove(mutex);
             rollback();
-            throw new MutexAcquisitionFailure("Timed out while upgrading mutex for key " + key, null);
+            throw new MutexAcquisitionFailure("Timed out while upgrading mutex", null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new MutexAcquisitionFailure("Interrupted while upgrading mutex for key " + key, e);
+          throw new MutexAcquisitionFailure("Interrupted while upgrading mutex", e);
         }
       } else {
         try {
           if (!mutex.mutex().tryWriteAcquire(mutexTimeoutMs)) {
             writeMutexes.remove(mutex);
             rollback();
-            throw new MutexAcquisitionFailure("Timed out while acquiring write mutex for key " + key, null);
+            throw new MutexAcquisitionFailure("Timed out while acquiring write mutex", null);
           }
         } catch (InterruptedException e) {
           rollback();
-          throw new MutexAcquisitionFailure("Interrupted while acquiring write mutex for key " + key, e);
+          throw new MutexAcquisitionFailure("Interrupted while acquiring write mutex", e);
         }
       }
     }

@@ -3,7 +3,7 @@ package com.obsidiandynamics.transram;
 import java.util.*;
 import java.util.function.*;
 
-public interface TransContext <K, V extends DeepCloneable<V>> {
+public interface TransContext<K, V extends DeepCloneable<V>> {
   enum State {
     OPEN, ROLLED_BACK, COMMITTED
   }
