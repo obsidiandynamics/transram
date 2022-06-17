@@ -1,7 +1,6 @@
 package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.mutex.*;
-import com.obsidiandynamics.transram.spec.*;
 import com.obsidiandynamics.transram.util.*;
 
 import java.util.*;

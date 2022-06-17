@@ -1,17 +1,10 @@
-plugins {
-    id 'java'
-}
+allprojects {
+    group 'com.obsidiandynamics.transram'
+    version '1.0-SNAPSHOT'
 
-group 'com.obsidiandynamics.transram'
-version '1.0-SNAPSHOT'
+    apply plugin: 'java'
 
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-}
-
-test {
-    useJUnitPlatform()
+    repositories {
+        mavenCentral()
+    }
 }

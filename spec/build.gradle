@@ -1,18 +1,3 @@
-plugins {
-    id 'java'
-}
-
-group 'com.obsidiandynamics.transram'
-version '1.0-SNAPSHOT'
-
-repositories {
-    mavenCentral()
-}
-
 dependencies {
-    implementation ':core'
-}
-
-test {
-    useJUnitPlatform()
+    implementation project(':core')
 }

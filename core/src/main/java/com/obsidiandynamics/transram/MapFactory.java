@@ -1,4 +1,4 @@
-package com.obsidiandynamics.transram.spec;
+package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.*;
 
