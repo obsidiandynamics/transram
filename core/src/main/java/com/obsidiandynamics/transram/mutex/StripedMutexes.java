@@ -1,5 +1,7 @@
 package com.obsidiandynamics.transram.mutex;
 
+import com.obsidiandynamics.transram.util.*;
+
 import java.util.*;
 import java.util.function.*;
 
@@ -65,8 +67,7 @@ public final class StripedMutexes<M extends Mutex> {
   }
 
   public static int hash(Object key, int stripes) {
-    final var rawHash = key.hashCode() % stripes;
-    return rawHash < 0 ? rawHash + stripes : rawHash;
+    return Hash.byModulo(key, stripes);
   }
 
   public MutexRef<M> forKey(Object key) {
