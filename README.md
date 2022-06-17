@@ -1,2 +1,3 @@
-# transram
-Transactional memory semantics over a map
+TransRAM
+===
+Transactional memory semantics for the JVM.

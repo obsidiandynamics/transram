@@ -3,7 +3,7 @@
 .vscode
 build
 /.calibration
-
+.DS_Store
 # Log file
 *.log
 
