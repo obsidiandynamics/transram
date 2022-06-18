@@ -1,3 +1,21 @@
 dependencies {
     implementation project(':core')
 }
+
+task runAllSrmlSpecs(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir('../')
+    mainClass.set('com.obsidiandynamics.transram.run.RunAllSrmlSpecs')
+}
+
+task runAllSs2plSpecs(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir('../')
+    mainClass.set('com.obsidiandynamics.transram.run.RunAllSs2plSpecs')
+}
+
+task runAllSpecs(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir('../')
+    mainClass.set('com.obsidiandynamics.transram.run.RunAllSpecs')
+}
