@@ -214,6 +214,17 @@ abstract class AbstractContextTest {
         final var ctx = map.transact();
         assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
         assertThat(ctx.size()).isEqualTo(10);
+        for (var key : ctx.keys(key -> key % 2 == 1)) {
+          ctx.delete(key);
+        }
+        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.size()).isEqualTo(5);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.size()).isEqualTo(5);
       }
     }
 
