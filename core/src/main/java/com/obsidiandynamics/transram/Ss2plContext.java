@@ -105,9 +105,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
               keys.add(unwrapped);
             }
           } else {
-            if (entry.getValue().hasValue()) {
-              keys.add(unwrapped);
-            }
+            keys.add(unwrapped);
           }
         }
       }
@@ -185,8 +183,8 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
               throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.INSERT_EXISTING, "Cannot insert an existing item for key " + key);
             }
             switch (existing.change) {
-              case UNCHANGED -> existing.change = Ss2plContext.StateChange.INSERTED;
-              case DELETED -> existing.change = Ss2plContext.StateChange.UNCHANGED;
+              case UNCHANGED -> existing.change = StateChange.INSERTED;
+              case DELETED -> existing.change = StateChange.UNCHANGED;
             }
           }
           case UNCHANGED -> {
@@ -199,8 +197,8 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
               throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.DELETE_NONEXISTENT, "Cannot delete a nonexistent item for key " + key);
             }
             switch (existing.change) {
-              case INSERTED -> existing.change = Ss2plContext.StateChange.UNCHANGED;
-              case UNCHANGED -> existing.change = Ss2plContext.StateChange.DELETED;
+              case INSERTED -> existing.change = StateChange.UNCHANGED;
+              case UNCHANGED -> existing.change = StateChange.DELETED;
             }
           }
         }
