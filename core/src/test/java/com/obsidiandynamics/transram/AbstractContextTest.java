@@ -4,6 +4,8 @@ import com.obsidiandynamics.transram.LifecycleFailure.*;
 import com.obsidiandynamics.transram.TransContext.*;
 import org.junit.jupiter.api.*;
 
+import java.util.function.*;
+
 import static org.assertj.core.api.Assertions.*;
 
 abstract class AbstractContextTest {
@@ -200,31 +202,60 @@ abstract class AbstractContextTest {
 
     @Test
     void testKeysPredicate() throws ConcurrentModeFailure {
+      final Predicate<Integer> even = key -> key % 2 == 0;
+      final Predicate<Integer> odd = key -> key % 2 == 1;
+
       final var map = AbstractContextTest.this.<Integer, Nil>newMap();
       {
         final var ctx = map.transact();
         for (var i = 0; i < 10; i++) {
           ctx.insert(i, Nil.instance());
         }
-        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.keys(even)).containsExactly(0, 2, 4, 6, 8);
         assertThat(ctx.size()).isEqualTo(10);
         ctx.commit();
       }
       {
         final var ctx = map.transact();
-        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.keys(even)).containsExactly(0, 2, 4, 6, 8);
         assertThat(ctx.size()).isEqualTo(10);
-        for (var key : ctx.keys(key -> key % 2 == 1)) {
+        for (var key : ctx.keys(odd)) {
           ctx.delete(key);
         }
-        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.keys(even)).containsExactly(0, 2, 4, 6, 8);
         assertThat(ctx.size()).isEqualTo(5);
         ctx.commit();
       }
       {
         final var ctx = map.transact();
-        assertThat(ctx.keys(key -> key % 2 == 0)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.keys(even)).containsExactly(0, 2, 4, 6, 8);
         assertThat(ctx.size()).isEqualTo(5);
+        for (var key : ctx.keys(even)) {
+          ctx.delete(key);
+        }
+        assertThat(ctx.keys(even)).isEmpty();
+        assertThat(ctx.size()).isEqualTo(0);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.keys(even)).isEmpty();
+        assertThat(ctx.size()).isEqualTo(0);
+        ctx.rollback();
+      }
+      {
+        final var ctx = map.transact();
+        for (var i = 0; i < 10; i++) {
+          ctx.insert(i, Nil.instance());
+        }
+        assertThat(ctx.keys(even)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.size()).isEqualTo(10);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.keys(even)).containsExactly(0, 2, 4, 6, 8);
+        assertThat(ctx.size()).isEqualTo(10);
       }
     }
 
