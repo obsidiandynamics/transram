@@ -2,10 +2,14 @@ package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.LifecycleFailure.*;
 import com.obsidiandynamics.transram.SrmlMap.*;
+import com.obsidiandynamics.transram.ThreadedContext.*;
 import com.obsidiandynamics.transram.TransContext.*;
 import com.obsidiandynamics.transram.mutex.*;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
+
+import java.util.*;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -274,6 +278,100 @@ public final class SrmlContextTest extends AbstractContextTest {
         assertThat(catchThrowableOfType(ctx::commit, LifecycleFailure.class)
                        .getReason()).isEqualTo(Reason.DELETE_NONEXISTENT);
         assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
+      }
+    }
+  }
+
+  @Nested
+  class QueueDrainTests {
+    private List<ExecutorService> executors;
+
+    @BeforeEach
+    void beforeEach() {
+      executors = new ArrayList<>();
+    }
+
+    @AfterEach
+    void afterEach() {
+      executors.forEach(ExecutorService::shutdown);
+    }
+
+    <K, V extends DeepCloneable<V>> ThreadedContext<K, V> threaded(TransContext<K, V> delegate) {
+      final var executor = Executors.newSingleThreadExecutor();
+      executors.add(executor);
+      return new ThreadedContext<>(delegate, executor);
+    }
+
+    @Test
+    void testOvertakenByCommitted() throws ConcurrentModeFailure {
+      final var map = Mockito.spy(SrmlContextTest.this.<Integer, StringBox>newMap());
+      final var store = Mockito.spy(new ConcurrentHashMap<Key, Deque<RawVersioned>>());
+      store.putAll(map.getStore());
+      Mockito.doReturn(store).when(map).getStore();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, StringBox.of("zero_v0"));
+        ctx.insert(1, StringBox.of("zero_v0"));
+        ctx.commit();
+      }
+
+      Mockito.doAnswer(invocation -> {
+        final var key = invocation.getArgument(0, Key.class);
+        final var ctx2 = map.transact();
+        ctx2.update(1, StringBox.of("one_v1"));
+        ctx2.commit();
+        assertThat(ctx2.getState()).isEqualTo(State.COMMITTED);
+        return invocation.callRealMethod();
+      }).when(store).compute(Mockito.eq(Key.wrap(0)), Mockito.any());
+
+      final var ctx1 = map.transact();
+      ctx1.update(0, StringBox.of("zero_v1"));
+      ctx1.commit();
+      assertThat(ctx1.getState()).isEqualTo(State.COMMITTED);
+
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isEqualTo(StringBox.of("zero_v1"));
+        assertThat(ctx.read(1)).isEqualTo(StringBox.of("one_v1"));
+      }
+    }
+
+    @Test
+    void testTwoTransactionsSimultaneouslyAttemptToRemoveQueuedContext() throws ConcurrentModeFailure {
+      final var map = Mockito.spy(SrmlContextTest.this.<Integer, StringBox>newMap());
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, StringBox.of("zero_v0"));
+        ctx.insert(1, StringBox.of("zero_v0"));
+        ctx.commit();
+      }
+
+      final var ctx1 = threaded(map.transact());
+      ctx1.update(0, StringBox.of("zero_v1"));
+
+      final var ctx2 = threaded(map.transact());
+      ctx2.update(1, StringBox.of("one_v1"));
+
+      final var queuedContexts = Mockito.spy(map.getQueuedContexts());
+      Mockito.doReturn(queuedContexts).when(map).getQueuedContexts();
+      final var barrier = new CyclicBarrier(2);
+      Mockito.doAnswer(invocation -> {
+        System.out.println("one in");
+        barrier.await();
+        System.out.println("both out");
+        return invocation.callRealMethod();
+      }).when(queuedContexts).peekFirst();
+
+      final var future1 = ctx1.commitFuture();
+      final var future2 = ctx2.commitFuture();
+      ContextFuture.awaitAll(List.of(future1, future2));
+      future1.get(); // check that no exceptions were thrown
+      future2.get();
+
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isEqualTo(StringBox.of("zero_v1"));
+        assertThat(ctx.read(1)).isEqualTo(StringBox.of("one_v1"));
       }
     }
   }

@@ -336,7 +336,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
     drainQueuedContexts();
   }
 
-  @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
+//  @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
   private void drainQueuedContexts() {
     final var queuedContexts = map.getQueuedContexts();
     long highestVersionPurged = 0;
@@ -351,11 +351,11 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
             for (var entry : oldest.local.entrySet()) {
               if (entry.getValue().written) {
                 final var values = map.getStore().get(entry.getKey());
-                synchronized (values) {
+//                synchronized (values) {
                   while (values.size() > queueDepth) {
                     values.removeLast();
                   }
-                }
+//                }
               }
             }
           }

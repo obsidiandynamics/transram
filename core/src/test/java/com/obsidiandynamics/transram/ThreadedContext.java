@@ -1,5 +1,7 @@
 package com.obsidiandynamics.transram;
 
+import org.assertj.core.internal.*;
+
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
@@ -32,68 +34,95 @@ final class ThreadedContext<K, V extends DeepCloneable<V>> implements TransConte
     RuntimeInterruptedException(String m) { super(m); }
   }
 
-  private void executeVoid(ConcurrentVoidOperation op) throws ConcurrentModeFailure {
-    execute(() -> {
+  private ContextFuture<Void> executeVoid(ConcurrentVoidOperation op) {
+    return execute(() -> {
       op.invoke();
       return null;
     });
   }
 
-  private <T> T execute(ConcurrentOperation<T> op) throws ConcurrentModeFailure {
-    final var future = executor.submit(op::invoke);
-    try {
-      return future.get();
-    } catch (InterruptedException e) {
-      throw new RuntimeInterruptedException(e.getMessage());
-    } catch (ExecutionException e) {
-      final var cause = e.getCause();
-      if (cause instanceof ConcurrentModeFailure) {
-        throw (ConcurrentModeFailure) cause;
-      } else {
-        throw new RuntimeExecutionException(e.getCause());
+  private <T> ContextFuture<T> execute(ConcurrentOperation<T> op) {
+    return new ContextFuture<>(executor.submit(op::invoke));
+  }
+
+  static class ContextFuture<T> {
+    private final Future<T> future;
+
+    ContextFuture(Future<T> future) { this.future = future; }
+
+    T get() throws ConcurrentModeFailure {
+      try {
+        return future.get();
+      } catch (InterruptedException e) {
+        throw new RuntimeInterruptedException(e.getMessage());
+      } catch (ExecutionException e) {
+        final var cause = e.getCause();
+        if (cause instanceof ConcurrentModeFailure) {
+          throw (ConcurrentModeFailure) cause;
+        } else {
+          throw new RuntimeExecutionException(e.getCause());
+        }
+      }
+    }
+
+    static void awaitAll(Collection<ContextFuture<?>> futures) {
+      final var barrier = new CyclicBarrier(futures.size());
+      for (var future : futures) {
+        new Thread(() -> {
+          try {
+            future.get();
+          } catch (ConcurrentModeFailure ignored) {}
+          try {
+            barrier.await();
+          } catch (InterruptedException | BrokenBarrierException ignored) {}
+        }).start();
       }
     }
   }
 
   @Override
   public Set<K> keys(Predicate<K> predicate) throws ConcurrentModeFailure {
-    return execute(() -> delegate.keys(predicate));
+    return execute(() -> delegate.keys(predicate)).get();
   }
 
   @Override
   public V read(K key) throws ConcurrentModeFailure {
-    return execute(() -> delegate.read(key));
+    return execute(() -> delegate.read(key)).get();
   }
 
   @Override
   public void insert(K key, V value) throws ConcurrentModeFailure {
-    executeVoid(() -> delegate.insert(key, value));
+    executeVoid(() -> delegate.insert(key, value)).get();
   }
 
   @Override
   public void update(K key, V value) throws ConcurrentModeFailure {
-    executeVoid(() -> delegate.update(key, value));
+    executeVoid(() -> delegate.update(key, value)).get();
   }
 
   @Override
   public void delete(K key) throws ConcurrentModeFailure {
-    executeVoid(() -> delegate.delete(key));
+    executeVoid(() -> delegate.delete(key)).get();
   }
 
   @Override
   public int size() throws ConcurrentModeFailure {
-    return execute(delegate::size);
+    return execute(delegate::size).get();
   }
 
   @Override
   public void commit() throws ConcurrentModeFailure {
-    executeVoid(delegate::commit);
+    executeVoid(delegate::commit).get();
+  }
+
+  public ContextFuture<Void> commitFuture() {
+    return executeVoid(delegate::commit);
   }
 
   @Override
   public void rollback() {
     try {
-      executeVoid(delegate::rollback);
+      executeVoid(delegate::rollback).get();
     } catch (ConcurrentModeFailure e) {
       throw new RuntimeExecutionException(e);
     }
