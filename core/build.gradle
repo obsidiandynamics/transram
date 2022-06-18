@@ -9,6 +9,25 @@ test {
     useJUnitPlatform()
 }
 
+apply plugin: 'jacoco'
+
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+test {
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        html.enabled true
+        xml.enabled true
+        csv.enabled false
+    }
+}
+
 apply plugin: 'maven-publish'
 apply plugin: 'signing'
 
