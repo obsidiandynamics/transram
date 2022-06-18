@@ -356,17 +356,13 @@ public final class SrmlContextTest extends AbstractContextTest {
       Mockito.doReturn(queuedContexts).when(map).getQueuedContexts();
       final var barrier = new CyclicBarrier(2);
       Mockito.doAnswer(invocation -> {
-        System.out.println("one in");
         barrier.await();
-        System.out.println("both out");
         return invocation.callRealMethod();
       }).when(queuedContexts).peekFirst();
 
       final var future1 = ctx1.commitFuture();
       final var future2 = ctx2.commitFuture();
-      ContextFuture.awaitAll(List.of(future1, future2));
-      future1.get(); // check that no exceptions were thrown
-      future2.get();
+      CompletableFuture.allOf(future1.completable(), future2.completable()).join();
 
       {
         final var ctx = map.transact();
