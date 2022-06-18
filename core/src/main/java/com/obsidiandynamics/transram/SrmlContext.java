@@ -183,7 +183,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private void alterSize(int sizeChange) throws BrokenSnapshotFailure {
     final var size = (Size) read(InternalKey.SIZE);
-    Assert.that(size != null, () -> "No size object");
+    Assert.isNotNull(size, Assert.withMessage("No size object"));
     final var newSize = size.get() + sizeChange;
     if (newSize < 0) {
       throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.NEGATIVE_SIZE, "Negative size after delete");
@@ -195,7 +195,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   @Override
   public int size() throws BrokenSnapshotFailure {
     final var size = (Size) read(InternalKey.SIZE);
-    Assert.that(size != null, () -> "No size object");
+    Assert.isNotNull(size, Assert.withMessage("No size object"));
     return size.get();
   }
 

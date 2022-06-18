@@ -126,14 +126,14 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   @Override
   public void insert(K key, V value) throws MutexAcquisitionFailure {
-    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot insert null value");
+    Assert.isNotNull(value, NullValueAssertionError::new, () -> "Cannot insert null value");
     write(Key.wrap(key), value, StateChange.INSERTED);
     alterSize(1);
   }
 
   @Override
   public void update(K key, V value) throws MutexAcquisitionFailure {
-    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot update null value");
+    Assert.isNotNull(value, NullValueAssertionError::new, () -> "Cannot update null value");
     write(Key.wrap(key), value, StateChange.UNCHANGED);
   }
 
@@ -213,7 +213,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
 
   private void alterSize(int sizeChange) throws MutexAcquisitionFailure {
     final var size = (Size) read(InternalKey.SIZE);
-    Assert.that(size != null, () -> "No size object");
+    Assert.isNotNull(size, Assert.withMessage("No size object"));
     final var newSize = size.get() + sizeChange;
     if (newSize < 0) {
       throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.NEGATIVE_SIZE, "Negative size after delete");
@@ -225,7 +225,7 @@ public final class Ss2plContext<K, V extends DeepCloneable<V>> implements TransC
   @Override
   public int size() throws MutexAcquisitionFailure {
     final var size = (Size) read(InternalKey.SIZE);
-    Assert.that(size != null, () -> "No size object");
+    Assert.isNotNull(size, Assert.withMessage("No size object"));
     return size.get();
   }
 
