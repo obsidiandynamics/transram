@@ -345,17 +345,15 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
       final var oldest = queuedContexts.peekFirst();
       if (oldest != null) {
         final var oldestState = oldest.getState();
-        if (oldestState != State.OPEN) {
+        if (oldestState == State.COMMITTED) {
           if (queuedContexts.remove(oldest)) {
-            if (oldestState == State.COMMITTED) {
-              highestVersionPurged = oldest.writeVersion;
-              for (var entry : oldest.local.entrySet()) {
-                if (entry.getValue().written) {
-                  final var values = map.getStore().get(entry.getKey());
-                  synchronized (values) {
-                    while (values.size() > queueDepth) {
-                      values.removeLast();
-                    }
+            highestVersionPurged = oldest.writeVersion;
+            for (var entry : oldest.local.entrySet()) {
+              if (entry.getValue().written) {
+                final var values = map.getStore().get(entry.getKey());
+                synchronized (values) {
+                  while (values.size() > queueDepth) {
+                    values.removeLast();
                   }
                 }
               }

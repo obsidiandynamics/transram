@@ -1,6 +1,8 @@
 package com.obsidiandynamics.transram;
 
+import com.obsidiandynamics.transram.LifecycleFailure.*;
 import com.obsidiandynamics.transram.SrmlMap.*;
+import com.obsidiandynamics.transram.TransContext.*;
 import com.obsidiandynamics.transram.mutex.*;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
@@ -222,6 +224,57 @@ public final class SrmlContextTest extends AbstractContextTest {
       ctx.insert(0, Nil.instance());
 
       assertThat(catchThrowableOfType(ctx::commit, MutexAcquisitionFailure.class)).hasMessage("Interrupted while acquiring write lock");
+    }
+  }
+
+  @Nested
+  class TombstoneTests {
+    @Test
+    void testInsertDeleteOfNonexistentOnTombstone() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.this.<Integer, Nil>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        ctx.delete(0);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        ctx.delete(0);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isNull();
+      }
+    }
+
+    @Test
+    void testDeleteOfNonexistentOnTombstone() throws ConcurrentModeFailure {
+      final var map = SrmlContextTest.this.<Integer, Nil>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(1, Nil.instance());
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        ctx.delete(1);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance()); // inserting an item here prevents negative size upon later delete
+        ctx.delete(1);
+        assertThat(catchThrowableOfType(ctx::commit, LifecycleFailure.class)
+                       .getReason()).isEqualTo(Reason.DELETE_NONEXISTENT);
+        assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
+      }
     }
   }
 }

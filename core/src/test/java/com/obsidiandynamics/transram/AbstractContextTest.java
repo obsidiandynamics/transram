@@ -416,7 +416,7 @@ abstract class AbstractContextTest {
     }
 
     @Test
-    void testInsertDeleteOfNonexistent() throws ConcurrentModeFailure {
+    void testInsertDeleteOfExisting() throws ConcurrentModeFailure {
       final var map = AbstractContextTest.this.<Integer, Nil>newMap();
       {
         final var ctx = map.transact();
@@ -430,6 +430,21 @@ abstract class AbstractContextTest {
         assertThat(catchThrowableOfType(ctx::commit, LifecycleFailure.class)
                        .getReason()).isEqualTo(Reason.INSERT_DELETE_EXISTING);
         assertThat(ctx.getState()).isEqualTo(State.ROLLED_BACK);
+      }
+    }
+
+    @Test
+    void testInsertDeleteOfNonexistent() throws ConcurrentModeFailure {
+      final var map = AbstractContextTest.this.<Integer, Nil>newMap();
+      {
+        final var ctx = map.transact();
+        ctx.insert(0, Nil.instance());
+        ctx.delete(0);
+        ctx.commit();
+      }
+      {
+        final var ctx = map.transact();
+        assertThat(ctx.read(0)).isNull();
       }
     }
   }
