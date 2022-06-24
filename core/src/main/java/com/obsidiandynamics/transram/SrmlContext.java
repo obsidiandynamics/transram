@@ -9,6 +9,8 @@ import java.util.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
 
+import static com.obsidiandynamics.transram.util.Assert.*;
+
 public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransContext<K, V> {
   private final SrmlMap<K, V> map;
 
@@ -126,14 +128,14 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   @Override
   public void insert(K key, V value) throws BrokenSnapshotFailure {
-    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot insert null value");
+    that(value != null, NullValueAssertionError::new, () -> "Cannot insert null value");
     write(Key.wrap(key), value, StateChange.INSERTED);
     alterSize(1);
   }
 
   @Override
   public void update(K key, V value) {
-    Assert.that(value != null, NullValueAssertionError::new, () -> "Cannot update null value");
+    that(value != null, NullValueAssertionError::new, () -> "Cannot update null value");
     write(Key.wrap(key), value, StateChange.UNCHANGED);
   }
 
@@ -183,7 +185,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
 
   private void alterSize(int sizeChange) throws BrokenSnapshotFailure {
     final var size = (Size) read(InternalKey.SIZE);
-    Assert.isNotNull(size, Assert.withMessage("No size object"));
+    that(isNotNull(size), Assert.withMessage("No size object"));
     final var newSize = size.get() + sizeChange;
     if (newSize < 0) {
       throw new IllegalLifecycleStateException(IllegalLifecycleStateException.Reason.NEGATIVE_SIZE, "Negative size after delete");
@@ -195,7 +197,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   @Override
   public int size() throws BrokenSnapshotFailure {
     final var size = (Size) read(InternalKey.SIZE);
-    Assert.isNotNull(size, Assert.withMessage("No size object"));
+    that(isNotNull(size), Assert.withMessage("No size object"));
     return size.get();
   }
 

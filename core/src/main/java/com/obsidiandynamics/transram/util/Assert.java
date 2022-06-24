@@ -11,14 +11,6 @@ public final class Assert {
     return () -> message;
   }
 
-  public static void isNotNull(Object obj, Supplier<String> messageBuilder) {
-    isNotNull(obj, AssertionError::new, messageBuilder);
-  }
-
-  public static void isNotNull(Object obj, Function<String, AssertionError> errorMaker, Supplier<String> messageBuilder) {
-    that(obj != null, errorMaker, messageBuilder);
-  }
-
   public static void that(boolean condition, Supplier<String> messageBuilder) {
     that(condition, AssertionError::new, messageBuilder);
   }
@@ -27,6 +19,10 @@ public final class Assert {
     if (! condition) {
       throw errorMaker.apply(messageBuilder.get());
     }
+  }
+
+  public static boolean isNotNull(Object obj) {
+    return obj != null;
   }
 
   public static boolean not(boolean b) {

@@ -1,6 +1,6 @@
 package com.obsidiandynamics.transram.mutex;
 
-import com.obsidiandynamics.transram.util.*;
+import static com.obsidiandynamics.transram.util.Assert.*;
 
 public final class UnfairUpgradeableMutex implements UpgradeableMutex {
   private static class LockState {
@@ -125,7 +125,7 @@ public final class UnfairUpgradeableMutex implements UpgradeableMutex {
     if (!lockState.readLocked) {
       throw new IllegalMonitorStateException("Not read-locked");
     }
-    Assert.that(Assert.not(lockState.writeLocked));
+    that(not(lockState.writeLocked));
 
     var deadline = 0L;
     synchronized (monitor) {
@@ -160,7 +160,7 @@ public final class UnfairUpgradeableMutex implements UpgradeableMutex {
     if (!lockState.writeLocked) {
       throw new IllegalMonitorStateException("Not write-locked");
     }
-    Assert.that(Assert.not(lockState.readLocked));
+    that(not(lockState.readLocked));
 
     synchronized (monitor) {
       readers = 1;
