@@ -65,7 +65,7 @@ final class ThreadedUpgradeableMutex implements UpgradeableMutex {
   private MutexFuture submit(InterruptibleVoidOperation op) {
     return submit(() -> {
       op.invoke();
-      return false;
+      return true;
     });
   }
 
@@ -91,7 +91,11 @@ final class ThreadedUpgradeableMutex implements UpgradeableMutex {
 
   @Override
   public boolean tryWriteAcquire(long timeoutMs) throws InterruptedException {
-    return submit(() -> delegate.tryWriteAcquire(timeoutMs)).get();
+    return tryWriteAcquireAsync(timeoutMs).get();
+  }
+
+  public MutexFuture tryWriteAcquireAsync(long timeoutMs) {
+    return submit(() -> delegate.tryWriteAcquire(timeoutMs));
   }
 
   @Override
@@ -106,6 +110,10 @@ final class ThreadedUpgradeableMutex implements UpgradeableMutex {
 
   @Override
   public boolean tryUpgrade(long timeoutMs) throws InterruptedException {
-    return submit(() -> delegate.tryUpgrade(timeoutMs)).get();
+    return tryUpgradeAsync(timeoutMs).get();
+  }
+
+  public MutexFuture tryUpgradeAsync(long timeoutMs) {
+    return submit(() -> delegate.tryUpgrade(timeoutMs));
   }
 }

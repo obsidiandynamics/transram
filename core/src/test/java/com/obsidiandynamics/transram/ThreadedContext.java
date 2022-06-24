@@ -109,7 +109,7 @@ final class ThreadedContext<K, V extends DeepCloneable<V>> implements TransConte
     submit(delegate::commit).get();
   }
 
-  public ContextFuture<Void> commitFuture() {
+  public ContextFuture<Void> commitAsync() {
     return submit(delegate::commit);
   }
 

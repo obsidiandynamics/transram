@@ -125,7 +125,7 @@ public final class UnfairUpgradeableMutex implements UpgradeableMutex {
     if (!lockState.readLocked) {
       throw new IllegalMonitorStateException("Not read-locked");
     }
-    Assert.that(!lockState.writeLocked);
+    Assert.that(Assert.not(lockState.writeLocked));
 
     var deadline = 0L;
     synchronized (monitor) {
@@ -160,8 +160,7 @@ public final class UnfairUpgradeableMutex implements UpgradeableMutex {
     if (!lockState.writeLocked) {
       throw new IllegalMonitorStateException("Not write-locked");
     }
-
-    Assert.that(!lockState.readLocked);
+    Assert.that(Assert.not(lockState.readLocked));
 
     synchronized (monitor) {
       readers = 1;

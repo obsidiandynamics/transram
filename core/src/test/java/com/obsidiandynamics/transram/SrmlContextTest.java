@@ -2,7 +2,6 @@ package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.LifecycleFailure.*;
 import com.obsidiandynamics.transram.SrmlMap.*;
-import com.obsidiandynamics.transram.ThreadedContext.*;
 import com.obsidiandynamics.transram.TransContext.*;
 import com.obsidiandynamics.transram.mutex.*;
 import org.junit.jupiter.api.*;
@@ -360,8 +359,8 @@ public final class SrmlContextTest extends AbstractContextTest {
         return invocation.callRealMethod();
       }).when(queuedContexts).peekFirst();
 
-      final var future1 = ctx1.commitFuture();
-      final var future2 = ctx2.commitFuture();
+      final var future1 = ctx1.commitAsync();
+      final var future2 = ctx2.commitAsync();
       CompletableFuture.allOf(future1.completable(), future2.completable()).join();
 
       {

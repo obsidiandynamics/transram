@@ -28,4 +28,8 @@ public final class Assert {
       throw errorMaker.apply(messageBuilder.get());
     }
   }
+
+  public static boolean not(boolean b) {
+    return !b;
+  }
 }

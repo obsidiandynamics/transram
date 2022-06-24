@@ -1,6 +1,5 @@
 package com.obsidiandynamics.transram.mutex;
 
-import com.obsidiandynamics.transram.*;
 import org.junit.jupiter.api.*;
 
 import java.util.*;
@@ -153,6 +152,8 @@ final class UnfairUpgradeableMutexTest {
 
   @Nested
   class ThreadedTests {
+    private static final long SHORT_SLEEP_MS = 1;
+
     private List<ExecutorService> executors;
 
     @BeforeEach
@@ -189,6 +190,7 @@ final class UnfairUpgradeableMutexTest {
       final var m2 = threaded(mutex);
       assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
       assertThat(m2.tryWriteAcquire(0)).isFalse();
+      assertThat(m2.tryWriteAcquire(1)).isFalse();
     }
 
     @Test
@@ -199,6 +201,91 @@ final class UnfairUpgradeableMutexTest {
       assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
       assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
       assertThat(m2.tryUpgrade(0)).isFalse();
+      assertThat(m2.tryUpgrade(1)).isFalse();
+    }
+
+    @Test
+    void testTimeoutOnWriteAcquireWhileWriteLocked() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      assertThat(m1.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryWriteAcquire(0)).isFalse();
+      assertThat(m2.tryWriteAcquire(1)).isFalse();
+    }
+
+    @Test
+    void testTimeoutOnReadAcquireWhileWriteLocked() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      assertThat(m1.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryReadAcquire(0)).isFalse();
+      assertThat(m2.tryReadAcquire(1)).isFalse();
+    }
+
+    @Test
+    void testAwaitWriteAcquireWhileReadLocked() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      final var m2_tryWriteAcquire = m2.tryWriteAcquireAsync(Long.MAX_VALUE);
+      Thread.sleep(SHORT_SLEEP_MS);
+      assertThat(m2_tryWriteAcquire.completable().isDone()).isFalse();
+      m1.readRelease();
+      assertThat(m2_tryWriteAcquire.get()).isTrue();
+    }
+
+    @Test
+    void testAwaitWriteAcquireWhileLockedBySeveralReaders() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      final var m3 = threaded(mutex);
+      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      final var m3_tryWriteAcquire = m3.tryWriteAcquireAsync(Long.MAX_VALUE);
+      Thread.sleep(SHORT_SLEEP_MS);
+      assertThat(m3_tryWriteAcquire.completable().isDone()).isFalse();
+      m1.readRelease();
+      Thread.sleep(SHORT_SLEEP_MS);
+      assertThat(m3_tryWriteAcquire.completable().isDone()).isFalse();
+      m2.readRelease();
+      assertThat(m3_tryWriteAcquire.get()).isTrue();
+    }
+
+    @Test
+    void testAwaitUpgradeWhileReadLocked() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      final var m2_tryUpgrade = m2.tryUpgradeAsync(Long.MAX_VALUE);
+      Thread.sleep(SHORT_SLEEP_MS);
+      assertThat(m2_tryUpgrade.completable().isDone()).isFalse();
+      m1.readRelease();
+      assertThat(m2_tryUpgrade.get()).isTrue();
+    }
+
+    @Test
+    void testAwaitUpgradeWhileLockedBySeveralReaders() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      final var m3 = threaded(mutex);
+      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m3.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      final var m3_tryUpgrade = m3.tryUpgradeAsync(Long.MAX_VALUE);
+      Thread.sleep(SHORT_SLEEP_MS);
+      assertThat(m3_tryUpgrade.completable().isDone()).isFalse();
+      m1.readRelease();
+      Thread.sleep(SHORT_SLEEP_MS);
+      assertThat(m3_tryUpgrade.completable().isDone()).isFalse();
+      m2.readRelease();
+      assertThat(m3_tryUpgrade.get()).isTrue();
     }
   }
 }
