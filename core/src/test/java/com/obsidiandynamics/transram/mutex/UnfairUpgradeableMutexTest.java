@@ -1,6 +1,10 @@
 package com.obsidiandynamics.transram.mutex;
 
+import com.obsidiandynamics.transram.*;
 import org.junit.jupiter.api.*;
+
+import java.util.*;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -144,6 +148,57 @@ final class UnfairUpgradeableMutexTest {
         assertThat(mutex.tryUpgrade(Long.MAX_VALUE)).isTrue();
         mutex.writeRelease();
       }
+    }
+  }
+
+  @Nested
+  class ThreadedTests {
+    private List<ExecutorService> executors;
+
+    @BeforeEach
+    void beforeEach() {
+      executors = new ArrayList<>();
+    }
+
+    @AfterEach
+    void afterEach() {
+      executors.forEach(ExecutorService::shutdown);
+    }
+
+    ThreadedUpgradeableMutex threaded(UpgradeableMutex delegate) {
+      final var executor = Executors.newSingleThreadExecutor();
+      executors.add(executor);
+      return new ThreadedUpgradeableMutex(delegate, executor);
+    }
+
+    @Test
+    void testReadAcquireWhileReadLocked() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      m1.readRelease();
+      m2.readRelease();
+    }
+
+    @Test
+    void testTimeoutOnWriteAcquireWhileReadLocked() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryWriteAcquire(0)).isFalse();
+    }
+
+    @Test
+    void testTimeoutOnUpgradeWhileReadLocked() throws InterruptedException {
+      final var mutex = new UnfairUpgradeableMutex();
+      final var m1 = threaded(mutex);
+      final var m2 = threaded(mutex);
+      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
+      assertThat(m2.tryUpgrade(0)).isFalse();
     }
   }
 }

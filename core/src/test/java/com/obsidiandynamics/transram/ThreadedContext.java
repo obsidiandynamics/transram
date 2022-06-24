@@ -49,7 +49,7 @@ final class ThreadedContext<K, V extends DeepCloneable<V>> implements TransConte
     }, executor));
   }
 
-  static class ContextFuture<T> {
+  static final class ContextFuture<T> {
     private final CompletableFuture<T> completable;
 
     ContextFuture(CompletableFuture<T> completable) { this.completable = completable; }
