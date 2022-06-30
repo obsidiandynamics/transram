@@ -7,83 +7,65 @@ import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.*;
 
-final class UnfairUpgradeableMutexTest {
+final class ReentrantMutexTest {
   @Nested
   class IllegalMonitorStateTests {
     @Test
     void testReadAfterRead() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(catchException(() -> mutex.tryReadAcquire(Long.MAX_VALUE)))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Already read-locked");
+      assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
     }
 
     @Test
     void testWriteAfterRead() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(catchException(() -> mutex.tryWriteAcquire(Long.MAX_VALUE)))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Already read-locked, use upgrade methods");
+      assertThat(mutex.tryWriteAcquire(0)).isFalse();
+      assertThat(mutex.tryWriteAcquire(1)).isFalse();
     }
 
     @Test
     void testDowngradeAfterRead() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
       assertThat(catchException(mutex::downgrade))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Not write-locked");
+          .isInstanceOf(IllegalMonitorStateException.class);
     }
 
     @Test
     void testReadAfterWrite() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(mutex.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(catchException(() -> mutex.tryReadAcquire(Long.MAX_VALUE)))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Already write-locked, use downgrade method");
+      assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
     }
 
     @Test
     void testWriteAfterWrite() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(mutex.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(catchException(() -> mutex.tryWriteAcquire(Long.MAX_VALUE)))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Already write-locked");
-    }
-
-    @Test
-    void testUpgradeAfterWrite() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
       assertThat(mutex.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(catchException(() -> mutex.tryUpgrade(Long.MAX_VALUE)))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Not read-locked");
-    }
-
-    @Test
-    void testUpgradeWithoutRead() {
-      final var mutex = new UnfairUpgradeableMutex();
-      assertThat(catchException(() -> mutex.tryUpgrade(Long.MAX_VALUE)))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Not read-locked");
     }
 
     @Test
     void testDowngradeWithoutWrite() {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(catchException(mutex::downgrade))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Not write-locked");
+          .isInstanceOf(IllegalMonitorStateException.class);
     }
 
     @Test
     void testReadReleaseWithoutRead() {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(catchException(mutex::readRelease))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Not read-locked");
+          .isInstanceOf(IllegalMonitorStateException.class);
     }
 
     @Test
     void testWriteReleaseWithoutWrite() {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       assertThat(catchException(mutex::writeRelease))
-          .isInstanceOf(IllegalMonitorStateException.class).hasMessage("Not write-locked");
+          .isInstanceOf(IllegalMonitorStateException.class);
     }
   }
 
@@ -91,37 +73,16 @@ final class UnfairUpgradeableMutexTest {
   class CycleTests {
     @Test
     void testReadReleaseCycle() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       for (var i = 0; i < 2; i++) {
         assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-        mutex.readRelease();
-      }
-    }
-
-    @Test
-    void testReadUpgradeReleaseCycle() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
-      for (var i = 0; i < 2; i++) {
-        assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-        assertThat(mutex.tryUpgrade(Long.MAX_VALUE)).isTrue();
-        mutex.writeRelease();
-      }
-    }
-
-    @Test
-    void testReadUpgradeDowngradeReleaseCycle() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
-      for (var i = 0; i < 2; i++) {
-        assertThat(mutex.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-        assertThat(mutex.tryUpgrade(Long.MAX_VALUE)).isTrue();
-        mutex.downgrade();
         mutex.readRelease();
       }
     }
 
     @Test
     void testWriteReleaseCycle() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       for (var i = 0; i < 2; i++) {
         assertThat(mutex.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
         mutex.writeRelease();
@@ -130,22 +91,11 @@ final class UnfairUpgradeableMutexTest {
 
     @Test
     void testWriteDowngradeReleaseCycle() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       for (var i = 0; i < 2; i++) {
         assertThat(mutex.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
         mutex.downgrade();
         mutex.readRelease();
-      }
-    }
-
-    @Test
-    void testWriteDowngradeUpgradeReleaseCycle() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
-      for (var i = 0; i < 2; i++) {
-        assertThat(mutex.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
-        mutex.downgrade();
-        assertThat(mutex.tryUpgrade(Long.MAX_VALUE)).isTrue();
-        mutex.writeRelease();
       }
     }
   }
@@ -166,15 +116,15 @@ final class UnfairUpgradeableMutexTest {
       executors.forEach(ExecutorService::shutdown);
     }
 
-    ThreadedUpgradeableMutex threaded(UpgradeableMutex delegate) {
+    ThreadedMutex threaded(Mutex delegate) {
       final var executor = Executors.newSingleThreadExecutor();
       executors.add(executor);
-      return new ThreadedUpgradeableMutex(delegate, executor);
+      return new ThreadedMutex(delegate, executor);
     }
 
     @Test
     void testReadAcquireWhileReadLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
@@ -185,7 +135,7 @@ final class UnfairUpgradeableMutexTest {
 
     @Test
     void testTimeoutOnWriteAcquireWhileReadLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
@@ -194,19 +144,8 @@ final class UnfairUpgradeableMutexTest {
     }
 
     @Test
-    void testTimeoutOnUpgradeWhileReadLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
-      final var m1 = threaded(mutex);
-      final var m2 = threaded(mutex);
-      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(m2.tryUpgrade(0)).isFalse();
-      assertThat(m2.tryUpgrade(1)).isFalse();
-    }
-
-    @Test
     void testTimeoutOnWriteAcquireWhileWriteLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       assertThat(m1.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
@@ -216,7 +155,7 @@ final class UnfairUpgradeableMutexTest {
 
     @Test
     void testTimeoutOnReadAcquireWhileWriteLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       assertThat(m1.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
@@ -226,7 +165,7 @@ final class UnfairUpgradeableMutexTest {
 
     @Test
     void testAwaitWriteAcquireWhileReadLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
@@ -239,7 +178,7 @@ final class UnfairUpgradeableMutexTest {
 
     @Test
     void testAwaitWriteAcquireWhileLockedBySeveralReaders() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       final var m3 = threaded(mutex);
@@ -256,41 +195,8 @@ final class UnfairUpgradeableMutexTest {
     }
 
     @Test
-    void testAwaitUpgradeWhileReadLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
-      final var m1 = threaded(mutex);
-      final var m2 = threaded(mutex);
-      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      final var m2_tryUpgrade = m2.tryUpgradeAsync(Long.MAX_VALUE);
-      Thread.sleep(SHORT_SLEEP_MS);
-      assertThat(m2_tryUpgrade.completable().isDone()).isFalse();
-      m1.readRelease();
-      assertThat(m2_tryUpgrade.get()).isTrue();
-    }
-
-    @Test
-    void testAwaitUpgradeWhileLockedBySeveralReaders() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
-      final var m1 = threaded(mutex);
-      final var m2 = threaded(mutex);
-      final var m3 = threaded(mutex);
-      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(m3.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      final var m3_tryUpgrade = m3.tryUpgradeAsync(Long.MAX_VALUE);
-      Thread.sleep(SHORT_SLEEP_MS);
-      assertThat(m3_tryUpgrade.completable().isDone()).isFalse();
-      m1.readRelease();
-      Thread.sleep(SHORT_SLEEP_MS);
-      assertThat(m3_tryUpgrade.completable().isDone()).isFalse();
-      m2.readRelease();
-      assertThat(m3_tryUpgrade.get()).isTrue();
-    }
-
-    @Test
     void testAwaitReadAcquireWhileWriteLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       assertThat(m1.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
@@ -303,7 +209,7 @@ final class UnfairUpgradeableMutexTest {
 
     @Test
     void testAwaitReadAcquireWhileWriteLockedWithDowngrade() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       assertThat(m1.tryWriteAcquire(Long.MAX_VALUE)).isTrue();
@@ -315,38 +221,8 @@ final class UnfairUpgradeableMutexTest {
     }
 
     @Test
-    void testCompetingReadAcquireAndUpgradeWhileReadLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
-      final var m1 = threaded(mutex);
-      final var m2 = threaded(mutex);
-      final var m3 = threaded(mutex);
-      assertThat(m1.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      assertThat(m2.tryReadAcquire(Long.MAX_VALUE)).isTrue();
-      final var m2_tryUpgrade = m2.tryUpgradeAsync(Long.MAX_VALUE);
-      final var m3_tryWriteAcquire = m3.tryWriteAcquireAsync(Long.MAX_VALUE);
-
-      // neither m2 nor m3 may proceed initially
-      Thread.sleep(SHORT_SLEEP_MS);
-      assertThat(m2_tryUpgrade.completable().isDone()).isFalse();
-      assertThat(m3_tryWriteAcquire.completable().isDone()).isFalse();
-
-      m1.readRelease();
-      assertThat(m2_tryUpgrade.get()).isTrue();
-      Thread.sleep(SHORT_SLEEP_MS);
-      assertThat(m3_tryWriteAcquire.completable().isDone()).isFalse();
-
-      m2.downgrade();
-      Thread.sleep(SHORT_SLEEP_MS);
-      assertThat(m3_tryWriteAcquire.completable().isDone()).isFalse();
-
-      m2.readRelease();
-      Thread.sleep(SHORT_SLEEP_MS);
-      assertThat(m3_tryWriteAcquire.get()).isTrue();
-    }
-
-    @Test
     void testCompetingMultipleWriteAcquireWhileReadLocked() throws InterruptedException {
-      final var mutex = new UnfairUpgradeableMutex();
+      final var mutex = new ReentrantMutex(false);
       final var m1 = threaded(mutex);
       final var m2 = threaded(mutex);
       final var m3 = threaded(mutex);
