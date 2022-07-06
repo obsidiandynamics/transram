@@ -4,6 +4,8 @@ import java.util.concurrent.atomic.*;
 import java.util.function.*;
 
 public final class Cas {
+  private Cas() {}
+
   public static long compareAndSetConditionally(AtomicLong atomicLong, long newValue, LongPredicate condition) {
     while (true) {
       final var existingValue = atomicLong.get();

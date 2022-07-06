@@ -3,6 +3,8 @@ package com.obsidiandynamics.transram.util;
 import java.util.function.*;
 
 public final class Assert {
+  private Assert() {}
+
   public static void that(boolean condition) {
     that(condition, () -> null);
   }
