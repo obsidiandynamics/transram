@@ -1,6 +1,8 @@
-TransRAM
+<img src="https://raw.githubusercontent.com/wiki/obsidiandynamics/transram/images/transram-logo.png" width="90px" alt="logo"/> TransRAM
 ===
 Transactional memory semantics for the JVM.
+
+<
 
 # What does it do?
 TransRAM provides _Strict Serializable_ transactional scope over operations on a hash map. It offers the following capabilities and guarantees:
@@ -43,7 +45,7 @@ dependencies {
 Replace `x.y.z` with the latest release version.
 
 ## 2. Implement the `DeepCloneable` interface
-The main data structure in TransRAM is a `TransMap`, which is akin to a conventional `java.util.Map`, albeit with a markedly simplified API surface. `TransMap` takes any key that satisfies the standard `equals`+`hashCode` contract. Because all TransRAM algorithms use multiversion object representations under the hood, map values must satisfy the `DeepCloneable` interface:
+The main data structure in TransRAM is a `TransMap`, which is akin to a conventional `java.util.Map`, albeit with a markedly simplified API surface. `TransMap` takes any key that satisfies the canonical `equals`+`hashCode` contract. Because all TransRAM algorithms use multiversion object representations under the hood, map values must implement the `DeepCloneable` interface:
 
 ```java
 public interface DeepCloneable<SELF> {
@@ -147,7 +149,7 @@ Transact.over(map).run(ctx -> {
 There are two concurrency control algorithms supported in the current release.
 
 1. **SS2PL (Strong-Strict Two-Phase Locking)** — the "textbook" algorithm for implementing strict serializability in universioned databases. In the first phase, locks are acquired and no locks are released. This phase progresses alongside the transaction. Upon commitment or rollback, the second phase is enacted, wherein locks are released and no new locks are acquired. SS2PL may deadlock, which internally forces an abort and the transaction is retried by the `Transact` helper.
-2. **SRML v3 (Snapshot Read with Merge Locking, version 3)** — an experimental algorithm that fulfils reads from a multiversioned snapshot, and then uses locks to merge changes from the local copy to the backing map. Although the merge phase is locking, it can never deadlock, because locks are acquired at most once during a transaction (during commitment) and are ordered to eliminate cycles. Nonetheless, SRML may abort a transaction if it detects an antidependency conflict (which is not possible in SS2PL).
+2. **SRML v3 (Snapshot Reads with Merge Locking, version 3)** — an experimental algorithm that fulfils reads from a multiversioned snapshot, and then uses locks to merge changes from the local copy to the backing map. Although the merge phase is locking, it can never deadlock, because locks are acquired at most once during a transaction (during commitment) and are ordered to eliminate cycles. Nonetheless, SRML may abort a transaction if it detects an antidependency conflict (which is not possible in SS2PL).
 
 Note, although SS2PL is a universion algorithm (in other words, it does not use multiversion concurrency control to allow nonblocking reads), it still requires that values implement the `DeepCloneable` interface. This is, in general, true of all current and future algorithms. `DeepCloneable` enables the memory-safe separation of the transaction's working copy (i.e., the items it has read and subsequently updated) from the backing store. Without `DeepCloneable`, concurrent transactions would operate on the same instance of an item, even before committing.
 
