@@ -39,7 +39,7 @@ public final class StripedMutexes<M extends Mutex> {
 
     @Override
     public String toString() {
-      return MutexRef.class.getSimpleName() + "[stripe=" + stripe + ']';
+      return MutexRef.class.getSimpleName() + "[stripe=" + stripe + ", mutex=" + mutex + ']';
     }
 
     @Override

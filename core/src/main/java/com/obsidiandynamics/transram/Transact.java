@@ -37,6 +37,10 @@ public final class Transact<K, V extends DeepCloneable<V>> {
     return new Transact<>(map);
   }
 
+  public static final class RuntimeInterruptedException extends RuntimeException {
+    RuntimeInterruptedException(InterruptedException cause) { super(cause); }
+  }
+
   public static <K, V extends DeepCloneable<V>> TransContext<K, V> run(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
     var maxBackoffMillis = 0;
     while (true) {
@@ -62,7 +66,7 @@ public final class Transact<K, V extends DeepCloneable<V>> {
           Thread.sleep((int) (rnd * maxBackoffMillis), (int) (rnd * 1_000_000));
           maxBackoffMillis++;
         } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+          throw new RuntimeInterruptedException(e);
         }
       }
     }

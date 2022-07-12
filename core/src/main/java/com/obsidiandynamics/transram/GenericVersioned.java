@@ -1,5 +1,7 @@
 package com.obsidiandynamics.transram;
 
+import java.util.*;
+
 public final class GenericVersioned<V extends DeepCloneable<V>> implements DeepCloneable<GenericVersioned<V>> {
   private final long version;
 
@@ -27,16 +29,15 @@ public final class GenericVersioned<V extends DeepCloneable<V>> implements DeepC
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
-    final GenericVersioned<?> versioned = (GenericVersioned<?>) o;
-
-    if (version != versioned.version) return false;
-    return value.equals(versioned.value);
+    final var that = (GenericVersioned<?>) o;
+    if (version != that.version) return false;
+    return Objects.equals(value, that.value);
   }
 
   @Override
   public int hashCode() {
     int result = (int) (version ^ (version >>> 32));
-    result = 31 * result + value.hashCode();
+    result = 31 * result + Objects.hashCode(value);
     return result;
   }
 
@@ -44,10 +45,6 @@ public final class GenericVersioned<V extends DeepCloneable<V>> implements DeepC
   public String toString() {
     return GenericVersioned.class.getSimpleName()+ "[version=" + version +
         ", value=" + value + ']';
-  }
-
-  public static <V extends DeepCloneable<V>> GenericVersioned<V> unset() {
-    return new GenericVersioned<>(-1, null);
   }
 
   @Override

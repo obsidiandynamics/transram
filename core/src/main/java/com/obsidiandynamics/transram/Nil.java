@@ -19,8 +19,7 @@ public final class Nil implements DeepCloneable<Nil> {
 
   @Override
   public boolean equals(Object o) {
-    //noinspection ConditionCoveredByFurtherCondition
-    return o == this || o instanceof Nil;
+    return o == this;
   }
 
   @Override
