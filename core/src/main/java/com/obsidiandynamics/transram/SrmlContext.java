@@ -214,7 +214,7 @@ public final class SrmlContext<K, V extends DeepCloneable<V>> implements TransCo
   }
 
   private static class LockModeAndState {
-    LockMode mode;
+    final LockMode mode;
     boolean locked;
 
     LockModeAndState(LockMode mode) {

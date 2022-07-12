@@ -30,7 +30,7 @@ final class StripedMutexesTest {
       final var toString = ref.toString();
       assertThat(toString).contains(StripedMutexes.MutexRef.class.getSimpleName());
       assertThat(toString).contains("stripe=7");
-      assertThat(toString).contains("mutex=" + String.valueOf(mutex));
+      assertThat(toString).contains("mutex=" + mutex);
     }
   }
 }

@@ -154,7 +154,7 @@ public final class Ss2plContextTest extends AbstractContextTest {
   @Nested
   class InterruptTests {
     @Test
-    void testInterruptOnRead() throws ConcurrentModeFailure, InterruptedException {
+    void testInterruptOnRead() throws InterruptedException {
       final var mutex = Mockito.mock(UpgradeableMutex.class);
       Mockito.doThrow(InterruptedException.class).when(mutex).tryReadAcquire(Mockito.anyLong());
       final var map = Ss2plContextTest.<Integer, Nil>newMap(new Ss2plMap.Options() {{
@@ -165,7 +165,7 @@ public final class Ss2plContextTest extends AbstractContextTest {
     }
 
     @Test
-    void testInterruptOnWrite() throws ConcurrentModeFailure, InterruptedException {
+    void testInterruptOnWrite() throws InterruptedException {
       final var mutex = Mockito.mock(UpgradeableMutex.class);
       Mockito.doThrow(InterruptedException.class).when(mutex).tryWriteAcquire(Mockito.anyLong());
       final var map = Ss2plContextTest.<Integer, Nil>newMap(new Ss2plMap.Options() {{

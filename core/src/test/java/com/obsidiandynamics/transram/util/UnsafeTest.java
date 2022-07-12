@@ -19,7 +19,7 @@ final class UnsafeTest {
   void testCastException() {
     assertThat(catchThrowable(() -> {
       var s = Unsafe.<String>cast(1);
-      throw new AssertionError("shouldn't reach here");
+      throw new AssertionError("shouldn't reach here for variable " + s);
     })).isInstanceOf(ClassCastException.class);
   }
 }

@@ -12,7 +12,7 @@ public final class TimedRunner {
     return runnable -> {
       new Thread(runnable).start();
     };
-  };
+  }
 
   public static <T> long run(int threads, int initialIterations, long minDurationMs, Executor executor, Supplier<T> threadLocalInit, Consumer<T> iteration) throws InterruptedException {
     final var latch = new CountDownLatch(threads);

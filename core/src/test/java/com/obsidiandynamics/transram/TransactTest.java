@@ -1,10 +1,8 @@
 package com.obsidiandynamics.transram;
 
 import com.obsidiandynamics.transram.TransContext.*;
-import com.obsidiandynamics.transram.Transact.*;
 import com.obsidiandynamics.transram.Transact.Region.*;
-import com.obsidiandynamics.transram.util.*;
-import org.assertj.core.api.*;
+import com.obsidiandynamics.transram.Transact.*;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -194,11 +192,9 @@ final class TransactTest {
     when(map.transact()).thenReturn(context);
 
     Thread.currentThread().interrupt();
-    assertThat(catchRuntimeException(() -> {
-      Transact.over(map)
-          .run(ctx -> {
-            throw new AntidependencyFailure("");
-          });
-    })).isInstanceOf(RuntimeInterruptedException.class);
+    assertThat(catchRuntimeException(() -> Transact.over(map)
+        .run(ctx -> {
+          throw new AntidependencyFailure("");
+        }))).isInstanceOf(RuntimeInterruptedException.class);
   }
 }

@@ -19,7 +19,7 @@ class ThreadedMutex implements Mutex {
 
   @FunctionalInterface
   protected interface InterruptibleVoidOperation {
-    void invoke() throws InterruptedException;
+    void invoke();
   }
 
   static final class RuntimeExecutionException extends RuntimeException {

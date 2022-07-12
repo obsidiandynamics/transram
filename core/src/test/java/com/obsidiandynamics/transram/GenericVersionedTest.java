@@ -18,7 +18,7 @@ final class GenericVersionedTest {
     final var toString = versioned.toString();
     assertThat(toString).contains(GenericVersioned.class.getSimpleName());
     assertThat(toString).contains("version=5");
-    assertThat(toString).contains("value=" + String.valueOf(box));
+    assertThat(toString).contains("value=" + box);
   }
 
   @Test
