@@ -19,9 +19,7 @@ public final class CasTest {
   void testCasSuccessfulOnRepeatAttempt() {
     final var ctr = Mockito.spy(new AtomicLong());
     final var attempts = new AtomicInteger();
-    Mockito.doAnswer(__ -> {
-      return attempts.incrementAndGet() == 1 ? 4L : 5L;
-    }).when(ctr).get();
+    Mockito.doAnswer(__ -> attempts.incrementAndGet() == 1 ? 4L : 5L).when(ctr).get();
     Mockito.doReturn(false).when(ctr).compareAndSet(Mockito.eq(4L), Mockito.eq(6L));
     Mockito.doReturn(true).when(ctr).compareAndSet(Mockito.eq(5L), Mockito.eq(6L));
     assertThat(Cas.compareAndSetConditionally(ctr, 6, Cas.lowerThan(6))).isEqualTo(5L);

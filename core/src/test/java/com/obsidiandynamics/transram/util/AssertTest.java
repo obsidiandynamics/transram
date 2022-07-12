@@ -4,7 +4,6 @@ import org.junit.jupiter.api.*;
 
 import static com.obsidiandynamics.transram.util.Assert.*;
 import static org.assertj.core.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.*;
 
 final class AssertTest {
   @Test

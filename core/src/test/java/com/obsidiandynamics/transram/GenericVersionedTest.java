@@ -14,7 +14,7 @@ final class GenericVersionedTest {
   @Test
   void testToString() {
     final var box = StringBox.of("foo");
-    final var versioned = new GenericVersioned<StringBox>(5, box);
+    final var versioned = new GenericVersioned<>(5, box);
     final var toString = versioned.toString();
     assertThat(toString).contains(GenericVersioned.class.getSimpleName());
     assertThat(toString).contains("version=5");
@@ -30,7 +30,7 @@ final class GenericVersionedTest {
   @Test
   void testDeepClone_withNonNullValue() {
     final var value = StringBox.of("foo");
-    final var original = new GenericVersioned<StringBox>(5, value);
+    final var original = new GenericVersioned<>(5, value);
     final var clone = original.deepClone();
     assertThat(clone).isNotSameAs(original);
     assertThat(clone).isEqualTo(original);
@@ -41,7 +41,7 @@ final class GenericVersionedTest {
 
   @Test
   void testHasValue() {
-    assertThat(new GenericVersioned<StringBox>(5, null).hasValue()).isFalse();
-    assertThat(new GenericVersioned<StringBox>(5, StringBox.of("foo")).hasValue()).isTrue();
+    assertThat(new GenericVersioned<>(5, null).hasValue()).isFalse();
+    assertThat(new GenericVersioned<>(5, StringBox.of("foo")).hasValue()).isTrue();
   }
 }

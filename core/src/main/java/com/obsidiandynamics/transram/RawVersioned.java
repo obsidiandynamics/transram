@@ -31,6 +31,6 @@ final class RawVersioned {
   }
 
   <V extends DeepCloneable<V>> GenericVersioned<V> generify() {
-    return new GenericVersioned<V>(version, Unsafe.cast(value));
+    return new GenericVersioned<>(version, Unsafe.cast(value));
   }
 }

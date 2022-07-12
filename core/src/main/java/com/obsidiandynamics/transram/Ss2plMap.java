@@ -59,7 +59,7 @@ public final class Ss2plMap<K, V extends DeepCloneable<V>> implements TransMap<K
     public Map<K, GenericVersioned<V>> dirtyView() {
       return store.entrySet().stream()
           .filter(e -> e.getKey() instanceof KeyRef<?>)
-          .collect(Collectors.toUnmodifiableMap(e -> Unsafe.<K>cast(((KeyRef<?>) e.getKey()).unwrap()),
+          .collect(Collectors.toUnmodifiableMap(e -> Unsafe.cast(((KeyRef<?>) e.getKey()).unwrap()),
                                                 e -> e.getValue().generify()));
     }
 

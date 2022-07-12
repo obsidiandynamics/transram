@@ -13,7 +13,7 @@ final class KeyRefTest {
 
   @Test
   void testToString() {
-    final var ref = new KeyRef<String>("foo");
+    final var ref = new KeyRef<>("foo");
     final var toString = ref.toString();
     assertThat(toString).contains(KeyRef.class.getSimpleName());
     assertThat(toString).contains("foo");
@@ -21,6 +21,6 @@ final class KeyRefTest {
 
   @Test
   void testUnwrap() {
-    assertThat(new KeyRef<String>("foo").unwrap()).isEqualTo("foo");
+    assertThat(new KeyRef<>("foo").unwrap()).isEqualTo("foo");
   }
 }

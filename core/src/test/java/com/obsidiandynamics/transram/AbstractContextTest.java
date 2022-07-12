@@ -453,79 +453,79 @@ abstract class AbstractContextTest {
   class CollidingKeyHashes {
     @Test
     void testRepeatableReadWithCollidingKeyHashes() throws ConcurrentModeFailure {
-      final var map = AbstractContextTest.this.<XInteger, StringBox>newMap();
+      final var map = AbstractContextTest.this.<CollidingInteger, StringBox>newMap();
       {
         final var ctx = map.transact();
-        ctx.insert(XInteger.of(0), StringBox.of("zero_v0"));
-        assertThat(ctx.read(XInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
-        ctx.insert(XInteger.of(1), StringBox.of("one_v0"));
-        assertThat(ctx.read(XInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
+        ctx.insert(CollidingInteger.of(0), StringBox.of("zero_v0"));
+        assertThat(ctx.read(CollidingInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
+        ctx.insert(CollidingInteger.of(1), StringBox.of("one_v0"));
+        assertThat(ctx.read(CollidingInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
         ctx.commit();
       }
       {
         final var ctx = map.transact();
-        ctx.update(XInteger.of(0), StringBox.of("zero_v1"));
-        assertThat(ctx.read(XInteger.of(0))).isEqualTo(StringBox.of("zero_v1"));
-        ctx.update(XInteger.of(1), StringBox.of("one_v1"));
-        assertThat(ctx.read(XInteger.of(1))).isEqualTo(StringBox.of("one_v1"));
+        ctx.update(CollidingInteger.of(0), StringBox.of("zero_v1"));
+        assertThat(ctx.read(CollidingInteger.of(0))).isEqualTo(StringBox.of("zero_v1"));
+        ctx.update(CollidingInteger.of(1), StringBox.of("one_v1"));
+        assertThat(ctx.read(CollidingInteger.of(1))).isEqualTo(StringBox.of("one_v1"));
         ctx.commit();
       }
     }
 
     @Test
     void testWriteThenReadWithCollidingKeyHashes() throws ConcurrentModeFailure {
-      final var map = AbstractContextTest.this.<XInteger, StringBox>newMap();
+      final var map = AbstractContextTest.this.<CollidingInteger, StringBox>newMap();
       {
         final var ctx = map.transact();
-        ctx.insert(XInteger.of(0), StringBox.of("zero_v0"));
-        assertThat(ctx.read(XInteger.of(1))).isNull();
+        ctx.insert(CollidingInteger.of(0), StringBox.of("zero_v0"));
+        assertThat(ctx.read(CollidingInteger.of(1))).isNull();
         ctx.commit();
       }
       {
         final var ctx = map.transact();
-        assertThat(ctx.read(XInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
+        assertThat(ctx.read(CollidingInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
       }
     }
 
     @Test
     void testReadThenWriteWithCollidingKeyHashes() throws ConcurrentModeFailure {
-      final var map = AbstractContextTest.this.<XInteger, StringBox>newMap();
+      final var map = AbstractContextTest.this.<CollidingInteger, StringBox>newMap();
       {
         final var ctx = map.transact();
-        assertThat(ctx.read(XInteger.of(0))).isNull();
-        ctx.insert(XInteger.of(1), StringBox.of("one_v0"));
+        assertThat(ctx.read(CollidingInteger.of(0))).isNull();
+        ctx.insert(CollidingInteger.of(1), StringBox.of("one_v0"));
         ctx.commit();
       }
       {
         final var ctx = map.transact();
-        assertThat(ctx.read(XInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
+        assertThat(ctx.read(CollidingInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
       }
     }
 
     @Test
     void testTwoReadsWithCollidingKeyHashes() throws ConcurrentModeFailure {
-      final var map = AbstractContextTest.this.<XInteger, StringBox>newMap();
+      final var map = AbstractContextTest.this.<CollidingInteger, StringBox>newMap();
       final var ctx = map.transact();
-      assertThat(ctx.read(XInteger.of(0))).isNull();
-      assertThat(ctx.read(XInteger.of(1))).isNull();
+      assertThat(ctx.read(CollidingInteger.of(0))).isNull();
+      assertThat(ctx.read(CollidingInteger.of(1))).isNull();
       ctx.commit();
     }
 
     @Test
     void testTwoWritesThenReadsWithCollidingKeyHashes() throws ConcurrentModeFailure {
-      final var map = AbstractContextTest.this.<XInteger, StringBox>newMap();
+      final var map = AbstractContextTest.this.<CollidingInteger, StringBox>newMap();
       {
         final var ctx = map.transact();
-        ctx.insert(XInteger.of(0), StringBox.of("zero_v0"));
-        ctx.insert(XInteger.of(1), StringBox.of("one_v0"));
-        assertThat(ctx.read(XInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
-        assertThat(ctx.read(XInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
+        ctx.insert(CollidingInteger.of(0), StringBox.of("zero_v0"));
+        ctx.insert(CollidingInteger.of(1), StringBox.of("one_v0"));
+        assertThat(ctx.read(CollidingInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
+        assertThat(ctx.read(CollidingInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
         ctx.commit();
       }
       {
         final var ctx = map.transact();
-        assertThat(ctx.read(XInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
-        assertThat(ctx.read(XInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
+        assertThat(ctx.read(CollidingInteger.of(0))).isEqualTo(StringBox.of("zero_v0"));
+        assertThat(ctx.read(CollidingInteger.of(1))).isEqualTo(StringBox.of("one_v0"));
       }
     }
   }

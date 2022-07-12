@@ -89,9 +89,8 @@ public final class Harness {
     final var failures = new Failures();
 
     final var dispatcher = new Dispatcher(profile);
-    final var took = TimedRunner.<SplittableRandom>run(THREADS, INIT_OPS_PER_THREAD, minDurationMs, executor, SplittableRandom::new, rng -> {
-      dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng));
-    });
+    final var took = TimedRunner.run(THREADS, INIT_OPS_PER_THREAD, minDurationMs, executor, SplittableRandom::new,
+                                          rng -> dispatcher.eval(rng.nextDouble(), ordinal -> spec.evaluate(ordinal, state, failures, rng)));
 
     spec.verify(state);
 

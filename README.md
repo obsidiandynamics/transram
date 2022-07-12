@@ -153,13 +153,13 @@ Note, although SS2PL is a universion algorithm (in other words, it does not use 
 
 Comparing the two algorithms:
 
-|             |SS2PL                    |SRML v3                   
-|:------------|:------------------------|:-------------------------
-|Isolation level for committed read/write transactions   |Strict serializable  |Strict Serializable
-|Isolation level for noncommittal read-only transactions |Strict serializable  |Serializable
-|Supports blind writes                                   |No                   |Yes
-|Handling of deleted items                               |Freed                |Replaced with a tombstone
-|Memory utilisation                                      |Minimal              |Higher, depending on queue depth        
+|                                                         | SS2PL               | SRML v3                          |
+|:--------------------------------------------------------|:--------------------|:---------------------------------|
+| Isolation level for committed read/write transactions   | Strict serializable | Strict Serializable              |
+| Isolation level for noncommittal read-only transactions | Strict serializable | Serializable                     |
+| Supports blind writes                                   | No                  | Yes                              |
+| Handling of deleted items                               | Freed               | Replaced with a tombstone        |
+| Memory utilisation                                      | Minimal             | Higher, depending on queue depth |
 
 Both algorithms offer strict serializable isolation for all committed transactions.
 

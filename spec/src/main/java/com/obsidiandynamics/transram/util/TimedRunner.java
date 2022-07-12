@@ -9,9 +9,7 @@ public final class TimedRunner {
    * @return An {@link Executor}.
    */
   public static Executor inNewThread() {
-    return runnable -> {
-      new Thread(runnable).start();
-    };
+    return runnable -> new Thread(runnable).start();
   }
 
   public static <T> long run(int threads, int initialIterations, long minDurationMs, Executor executor, Supplier<T> threadLocalInit, Consumer<T> iteration) throws InterruptedException {
