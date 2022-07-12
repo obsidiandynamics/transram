@@ -2,8 +2,6 @@
 ===
 Transactional memory semantics for the JVM.
 
-<
-
 # What does it do?
 TransRAM provides _Strict Serializable_ transactional scope over operations on a hash map. It offers the following capabilities and guarantees:
 
