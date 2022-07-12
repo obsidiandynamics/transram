@@ -29,15 +29,15 @@ public final class Transact<K, V extends DeepCloneable<V>> {
     return this;
   }
 
-  public void run(Region<K, V> region) {
-    run(map, region, onFailure);
+  public TransContext<K, V> run(Region<K, V> region) {
+    return run(map, region, onFailure);
   }
 
   public static <K, V extends DeepCloneable<V>> Transact<K, V> over(TransMap<K, V> map) {
     return new Transact<>(map);
   }
 
-  public static <K, V extends DeepCloneable<V>> Action run(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
+  public static <K, V extends DeepCloneable<V>> TransContext<K, V> run(TransMap<K, V> map, Region<K, V> region, Consumer<ConcurrentModeFailure> onFailure) {
     var maxBackoffMillis = 0;
     while (true) {
       try {
@@ -49,10 +49,10 @@ public final class Transact<K, V extends DeepCloneable<V>> {
             break;
           case ROLLBACK:
             if (ctx.getState() != State.ROLLED_BACK) ctx.rollback();
-            return Action.ROLLBACK;
+            return ctx;
           case COMMIT:
             if (ctx.getState() != State.COMMITTED) ctx.commit();
-            return Action.COMMIT;
+            return ctx;
         }
       } catch (ConcurrentModeFailure concurrentModeFailure) {
         onFailure.accept(concurrentModeFailure);

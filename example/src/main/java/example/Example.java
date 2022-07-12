@@ -1,7 +1,6 @@
 package example;
 
 import com.obsidiandynamics.transram.*;
-import com.obsidiandynamics.transram.SrmlMap.*;
 import com.obsidiandynamics.transram.Transact.Region.*;
 
 public class Example {
@@ -11,6 +10,8 @@ public class Example {
     private String lastName;
 
     private String email;
+
+    private int balance;
 
     Customer(String firstName, String lastName, String email) {
       this.firstName = firstName;
@@ -42,19 +43,25 @@ public class Example {
       this.email = email;
     }
 
+    public int getBalance() { return balance; }
+
+    public void setBalance(int balance) { this.balance = balance; }
+
     @Override
     public String toString() {
-      return Customer.class.getSimpleName() + "[firstName=" + firstName + ", lastName=" + lastName + ", email=" + email + ']';
+      return Customer.class.getSimpleName() + "[firstName=" + firstName + ", lastName=" + lastName + ", email=" + email + ", balance=" + balance + ']';
     }
 
     @Override
     public Customer deepClone() {
-      return new Customer(firstName, lastName, email);
+      final var copy = new Customer(firstName, lastName, email);
+      copy.balance = balance;
+      return copy;
     }
   }
 
   public static void main(String[] args) {
-    final var map = new SrmlMap<String, Customer>(new Options());
+    final var map = new Ss2plMap<String, Customer>(new Ss2plMap.Options());
 
     // Atomically insert a pair of customers.
     Transact.over(map).run(ctx -> {
@@ -62,24 +69,52 @@ public class Example {
       ctx.insert("jane.citizen", new Customer("Jane", "Citizen", "jane.citizen@local"));
 
       System.out.format("there are now %d customers%n", ctx.size());
-      return Action.COMMIT; // upon commitment, either both customers will exist or neither
+      return Action.COMMIT;      // upon commitment, either both customers will exist or neither
+    });
+
+    // Atomically move funds between customers.
+    Transact.over(map).run(ctx -> {
+      final var customer1 = ctx.read("john.citizen");
+      final var customer2 = ctx.read("jane.citizen");
+
+      final var amountToTransfer = 100;
+
+      customer1.setBalance(customer1.getBalance() - amountToTransfer);
+      customer2.setBalance(customer2.getBalance() + amountToTransfer);
+      ctx.update("john.citizen", customer1);
+      ctx.update("jane.citizen", customer2);
+
+      if (customer1.getBalance() < 0) {
+        System.out.format("Rolling back due to negative funds (%d)%n", customer1.getBalance());
+        return Action.ROLLBACK;  // never leave the customer with a –ve balance
+      }
+
+      return Action.COMMIT;      // upon commitment, the funds be moved
     });
 
     // Change a customer's attribute.
-    Transact.over(map).run(ctx -> {
+    final var completed = Transact.over(map).run(ctx -> {
       final var customer = ctx.read("jane.citizen");
       System.out.format("customer: %s%n", customer);
       customer.setEmail("jane.citizen@freemail.org");
       ctx.update("jane.citizen", customer);
       return Action.COMMIT;
     });
+    System.out.format("completed version: %d%n", completed.getVersion());
+
+    // Delete one of the customers.
+    Transact.over(map).run(ctx -> {
+      ctx.delete("jane.citizen");
+      return Action.COMMIT;
+    });
 
     // Print all customers whose key ends with '.citizen'.
-    Transact.over(map).run(ctx -> {
-      for (var key : ctx.keys(key -> key.endsWith(".citizen"))) {
+   Transact.over(map).run(ctx -> {
+      final var keys = ctx.keys(key -> key.endsWith(".citizen"));
+      for (var key : keys) {
         System.out.format("key: %s, value: %s%n", key, ctx.read(key));
       }
-      return Action.ROLLBACK;
+      return Action.ROLLBACK;    // a noncommittal transaction
     });
   }
 }
