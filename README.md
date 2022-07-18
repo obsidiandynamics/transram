@@ -4,7 +4,7 @@
 [![Language grade: Java](https://img.shields.io/lgtm/grade/java/g/obsidiandynamics/transram.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/obsidiandynamics/transram/context:java)
 [![Gradle build](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml/badge.svg)](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml)
 
-Transactional memory semantics for the JVM.
+**Transactional memory semantics for the JVM.**
 
 # What does it do?
 TransRAM provides _Strict Serializable_ transactional scope over operations on a hash map. It offers the following capabilities and guarantees:

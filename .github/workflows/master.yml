@@ -14,3 +14,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       - run: ./gradlew build
+      - run: curl -Os https://uploader.codecov.io/latest/linux/codecov
+      - run: chmod +x codecov
+      - run: ./codecov
