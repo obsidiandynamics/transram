@@ -1,5 +1,6 @@
 <img src="https://raw.githubusercontent.com/wiki/obsidiandynamics/transram/images/transram-logo.png" width="90px" alt="logo"/> TransRAM
 ===
+[![Maven release](https://maven-badges.herokuapp.com/maven-central/com.obsidiandynamics.transram/core/badge.svg)](https://search.maven.org/search?q=g:com.obsidiandynamics.transram)
 [![Language grade: Java](https://img.shields.io/lgtm/grade/java/g/obsidiandynamics/transram.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/obsidiandynamics/transram/context:java)
 [![Gradle build](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml/badge.svg)](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml)
 
