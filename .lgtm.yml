@@ -1,0 +1,8 @@
+extraction:
+  java:
+    index:
+      java_version: "17"
+queries:
+  - include: "*"
+  - exclude: java/notify-instead-of-notify-all 
+  - exclude: java/duplicate-method
