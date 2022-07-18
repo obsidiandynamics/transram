@@ -20,6 +20,7 @@ final class Size implements DeepCloneable<Size> {
     return new Size(value);
   }
 
+  @Override
   public String toString() {
     return Size.class.getSimpleName() + '[' + value + ']';
   }

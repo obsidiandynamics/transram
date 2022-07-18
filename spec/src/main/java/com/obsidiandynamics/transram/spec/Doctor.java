@@ -17,6 +17,7 @@ public final class Doctor implements DeepCloneable<Doctor> {
     this.rostered = rostered;
   }
 
+  @Override
   public String toString() {
     return Doctor.class.getSimpleName() + "[rostered=" + rostered + ']';
   }

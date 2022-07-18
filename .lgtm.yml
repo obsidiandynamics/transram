@@ -4,5 +4,8 @@ extraction:
       java_version: "16"
 queries:
   - include: "*"
+  - exclude: java/missing-case-in-switch
+  - exclude: java/uncaught-number-format-exception
   - exclude: java/notify-instead-of-notify-all 
   - exclude: java/duplicate-method
+  - exclude: java/constant-comparison

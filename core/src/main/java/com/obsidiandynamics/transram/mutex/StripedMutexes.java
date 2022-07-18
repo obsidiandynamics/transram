@@ -43,7 +43,7 @@ public final class StripedMutexes<M extends Mutex> {
     }
 
     @Override
-    public int compareTo(MutexRef o) {
+    public int compareTo(MutexRef<?> o) {
       return Integer.compare(stripe, o.stripe);
     }
   }

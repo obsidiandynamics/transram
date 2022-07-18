@@ -27,7 +27,7 @@ public final class TimedRunner {
               final var took = System.currentTimeMillis() - startTime;
               if (took < minDurationMs) {
                 final var targetOpsPerThread = (long) ((double) opsPerThread * minDurationMs / took);
-                opsPerThread += Math.max(1, (targetOpsPerThread - opsPerThread) * .1);
+                opsPerThread += (int) Math.max(1, (targetOpsPerThread - opsPerThread) * .1);
               } else {
                 break;
               }
