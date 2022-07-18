@@ -1,5 +1,7 @@
 <img src="https://raw.githubusercontent.com/wiki/obsidiandynamics/transram/images/transram-logo.png" width="90px" alt="logo"/> TransRAM
 ===
+[![Language grade: Java](https://img.shields.io/lgtm/grade/java/g/obsidiandynamics/transram.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/obsidiandynamics/transram/context:java)
+
 Transactional memory semantics for the JVM.
 
 # What does it do?
