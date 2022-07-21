@@ -52,7 +52,7 @@ The main data structure in TransRAM is a `TransMap`, which is akin to a conventi
 
 ```java
 public interface DeepCloneable<SELF> {
-  SELF deepClone();
+    SELF deepClone();
 }
 ```
 
