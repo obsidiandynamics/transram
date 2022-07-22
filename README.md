@@ -1,6 +1,6 @@
 <img src="https://raw.githubusercontent.com/wiki/obsidiandynamics/transram/images/transram-logo.png" width="90px" alt="logo"/> TransRAM
 ===
-[![Maven release](https://maven-badges.herokuapp.com/maven-central/com.obsidiandynamics.transram/core/badge.svg)](https://search.maven.org/search?q=g:com.obsidiandynamics.transram)
+[![Maven release](https://img.shields.io/maven-metadata/v.svg?color=blue&label=maven-central&metadataUrl=https%3A%2F%2Frepo1.maven.org%2Fmaven2%2Fcom%2Fobsidiandynamics%2Ftransram%2Fcore%2Fmaven-metadata.xml)](https://mvnrepository.com/artifact/com.obsidiandynamics.transram)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/obsidiandynamics/transram.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/obsidiandynamics/transram/alerts/)
 [![Gradle build](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml/badge.svg)](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml)
 [![codecov](https://codecov.io/gh/obsidiandynamics/transram/branch/master/graph/badge.svg?token=SknOYiH9Wb)](https://codecov.io/gh/obsidiandynamics/transram)
