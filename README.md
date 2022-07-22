@@ -1,11 +1,11 @@
 <img src="https://raw.githubusercontent.com/wiki/obsidiandynamics/transram/images/transram-logo.png" width="90px" alt="logo"/> TransRAM
 ===
+Transactional memory semantics for the JVM.
+
 [![Maven release](https://img.shields.io/maven-metadata/v.svg?color=blue&label=maven-central&metadataUrl=https%3A%2F%2Frepo1.maven.org%2Fmaven2%2Fcom%2Fobsidiandynamics%2Ftransram%2Fcore%2Fmaven-metadata.xml)](https://mvnrepository.com/artifact/com.obsidiandynamics.transram)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/obsidiandynamics/transram.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/obsidiandynamics/transram/alerts/)
 [![Gradle build](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml/badge.svg)](https://github.com/obsidiandynamics/transram/actions/workflows/master.yml)
 [![codecov](https://codecov.io/gh/obsidiandynamics/transram/branch/master/graph/badge.svg?token=SknOYiH9Wb)](https://codecov.io/gh/obsidiandynamics/transram)
-
-**Transactional memory semantics for the JVM.**
 
 # What does it do?
 TransRAM provides _Strict Serializable_ transactional scope over operations on a hash map. It offers the following capabilities and guarantees:
