@@ -15,9 +15,11 @@ public final class TimedRunner {
   public static <T> long run(int threads, int initialIterations, long minDurationMs, Executor executor, Supplier<T> threadLocalInit, Consumer<T> iteration) throws InterruptedException {
     final var latch = new CountDownLatch(threads);
     final var startTime = System.currentTimeMillis();
+    final var barrier = new CyclicBarrier(threads);
     for (var thread = 0; thread < threads; thread++) {
       executor.execute(() -> {
         try {
+          barrier.await();
           final var threadLocal = threadLocalInit.get();
           var opsPerThread = initialIterations;
           var op = 0;
@@ -33,6 +35,8 @@ public final class TimedRunner {
               }
             }
           }
+        } catch (InterruptedException | BrokenBarrierException e) {
+          throw new RuntimeException(e);
         } finally {
           latch.countDown();
         }

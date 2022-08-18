@@ -71,8 +71,14 @@ public class RunUpgradeableLockWorkload {
     final var latch = new CountDownLatch(NUM_THREADS);
     final var startTime = System.currentTimeMillis();
     final var workload = new Dispatcher(PROFILE);
+    final var startBarrier = new CyclicBarrier(NUM_THREADS);
     for (var i = 0; i < NUM_THREADS; i++) {
       new Thread(() -> {
+        try {
+          startBarrier.await();
+        } catch (InterruptedException | BrokenBarrierException e) {
+          throw new RuntimeException(e);
+        }
         final var random = new SplittableRandom();
         try {
           for (var j = 0; j < NUM_OPS_PER_THREAD; j++) {
